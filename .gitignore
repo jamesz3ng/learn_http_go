@@ -1,0 +1,9 @@
+# Your course progress (passed stages, quiz scores, review schedule).
+# Delete this line if you want to commit your progress, e.g. to continue
+# on another machine.
+/.course/
+
+# Build output
+/bin/
+*.test
+*.out
