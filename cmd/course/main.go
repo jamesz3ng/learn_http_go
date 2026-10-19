@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -28,7 +29,7 @@ Usage:
   go run ./cmd/course [status]          show your progress and what to do next
   go run ./cmd/course test [STAGES]     run stage tests; STAGES is N, N-M or "all"
                                         (default: stage 1 up to your current stage)
-        -race                           also run Go's race detector (needs cgo)
+        -race=false                     skip Go's race detector (on by default when cgo works)
         -v                              show output from passing tests too
   go run ./cmd/course quiz [N]          take the quiz for stage N
   go run ./cmd/course review [-n 10]    review quiz questions that are due (spaced repetition)
@@ -47,6 +48,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "course: reading progress:", err)
 		os.Exit(1)
 	}
+	prog.pruneOrphanCards()
 	c := newColors()
 
 	args := os.Args[1:]
@@ -122,7 +124,7 @@ func cmdStatus(p *progress, c colors) error {
 		if r, ok := p.Quizzes[s.Num]; ok {
 			quiz = c.dim(fmt.Sprintf("  quiz %d/%d", r.Score, r.Total))
 		}
-		line := fmt.Sprintf("%s%2d  %-44s %s", mark, s.Num, s.Title, c.dim(s.Project))
+		line := fmt.Sprintf("%s%2d  %-50s %s", mark, s.Num, s.Title, c.dim(s.Project))
 		if s.Num == cur {
 			line = c.bold(line)
 		}
@@ -152,7 +154,7 @@ func cmdStatus(p *progress, c colors) error {
 
 func cmdTest(root string, p *progress, c colors, args []string) error {
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	race := fs.Bool("race", false, "run with the race detector")
+	race := fs.Bool("race", raceAvailable(), "run with the race detector (default: on when cgo is available)")
 	verbose := fs.Bool("v", false, "show output of passing tests")
 	if err := fs.Parse(reorderFlags(args)); err != nil {
 		return err
@@ -164,6 +166,10 @@ func cmdTest(root string, p *progress, c colors, args []string) error {
 		if err != nil {
 			return err
 		}
+	}
+	if !*race {
+		fmt.Println(c.yellow("Note: running without the race detector (it needs cgo and a C compiler)."))
+		fmt.Println(c.dim("Tests for concurrent code (stages 9, 19) can then miss data races."))
 	}
 	results, err := runStageTests(root, from, to, *race, *verbose, c)
 	if err != nil {
@@ -180,6 +186,7 @@ func cmdTest(root string, p *progress, c colors, args []string) error {
 			}
 			continue
 		}
+		delete(p.Passed, n) // a regression un-passes the stage
 		allPassed = false
 		if firstFail == 0 {
 			firstFail = n
@@ -212,6 +219,21 @@ func cmdTest(root string, p *progress, c colors, args []string) error {
 		fmt.Println(c.green("  That was the last stage. Well done!"))
 	}
 	return nil
+}
+
+// raceAvailable reports whether `go test -race` can work here: it needs cgo
+// and a C compiler.
+func raceAvailable() bool {
+	out, err := exec.Command("go", "env", "CGO_ENABLED", "CC").Output()
+	if err != nil {
+		return false
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) < 2 || fields[0] != "1" {
+		return false
+	}
+	_, err = exec.LookPath(fields[1])
+	return err == nil
 }
 
 // reorderFlags moves flags before positional arguments, so both

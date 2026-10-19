@@ -79,7 +79,7 @@ func TestStage24_ServerSpeaksHTTPS(t *testing.T) {
 		t.Fatalf("over TLS the server negotiated %s, want HTTP/2%s", resp.Proto,
 			hint("ServeTLS enables HTTP/2 automatically, unless TLSNextProto is set to a non-nil map"))
 	}
-	if !strings.HasPrefix(decodeObject(t, string(body))["url"].(string), "https://") {
+	if u, _ := decodeObject(t, string(body))["url"].(string); !strings.HasPrefix(u, "https://") {
 		t.Fatalf("/get should report an https:// url over TLS, got %s", body)
 	}
 

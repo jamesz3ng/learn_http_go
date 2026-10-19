@@ -288,3 +288,27 @@ func TestStage10_ReusesConnections(t *testing.T) {
 			hint("read every response body to the end and close it, on error paths too, so the connection can be reused"))
 	}
 }
+
+func TestStage10_RejectsUnaddressableKeys(t *testing.T) {
+	f := newFakeKV(t, "")
+	kv := newKV(t, f.URL)
+	ctx := context.Background()
+	for _, key := range []string{"", ".", "..", strings.Repeat("k", 257)} {
+		if _, err := kv.Get(ctx, key); err == nil {
+			t.Fatalf("Get(%q) returned no error%s", truncate(key, 20),
+				hint(`"" would address /kv itself, and "." and ".." are path segments that get cleaned away; reject them (and keys over 256 bytes) before sending anything`))
+		}
+		if _, err := kv.Put(ctx, key, []byte("v")); err == nil {
+			t.Fatalf("Put(%q) returned no error", truncate(key, 20))
+		}
+		if err := kv.Delete(ctx, key); err == nil {
+			t.Fatalf("Delete(%q) returned no error", truncate(key, 20))
+		}
+	}
+	f.mu.Lock()
+	n := len(f.paths)
+	f.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("invalid keys should be rejected without sending a request, but the server saw %d", n)
+	}
+}

@@ -115,13 +115,13 @@ Implement [`proxy.New(cfg)`](../../proxy/proxy.go):
 | Requirement | Detail |
 |---|---|
 | validation | error if `Backends` is empty or any entry isn't an absolute `http(s)` URL |
-| balancing | round robin across healthy backends: 9 sequential requests over 3 backends → 3 each |
+| balancing | round robin across **healthy** backends: 9 sequential requests over 3 backends → 3 each; with one down, the other two alternate evenly |
 | forwarding | method, body, end-to-end headers, query; path = backend path + request path (`http://b/base/` + `/items/42?x=1` → `/base/items/42?x=1`); response status, headers and body back to the client |
 | hop-by-hop | removed, including headers listed in `Connection` |
 | forwarded headers | `X-Forwarded-For` = client IP, `X-Forwarded-Host` = the host the client requested, `X-Forwarded-Proto` = `http`/`https` |
-| failover | if a backend can't be connected to, mark it down for `cfg.Cooldown` (default 10s) and retry the request on the next backend, for requests without a body |
+| failover | if a backend can't be connected to, mark it down for `cfg.Cooldown` (default 10s), so it isn't even dialled again until then, and retry the request on the next backend, for requests without a body. Reach backends through `cfg.Transport` (default `http.DefaultTransport`) |
 | all down | `502 Bad Gateway` |
-| streaming | responses are flushed as they arrive (an SSE event gets through before the backend finishes) |
+| streaming | every response is flushed as it arrives: an SSE event, and also the first part of a slow response that has a `Content-Length` |
 
 `cmd/proxy` is ready to run it:
 

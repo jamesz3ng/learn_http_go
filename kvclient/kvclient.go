@@ -39,7 +39,8 @@ type Client struct {
 }
 
 // New returns a client for the server at baseURL, which may include a path
-// prefix (e.g. "http://host/api"). If hc is nil, use a client with a timeout.
+// prefix (e.g. "http://host/api"). If hc is nil, use a client with a timeout
+// (not http.DefaultClient, which has none).
 func New(baseURL string, hc *http.Client) (*Client, error) {
 	// TODO(stage 10)
 	return &Client{}, nil
@@ -72,6 +73,9 @@ func (c *Client) List(ctx context.Context, prefix string) ([]string, error) {
 // (http.DefaultTransport if base is nil).
 func NewBearerTransport(base http.RoundTripper, token string) http.RoundTripper {
 	// TODO(stage 16)
+	if base == nil {
+		base = http.DefaultTransport
+	}
 	return base
 }
 
@@ -83,9 +87,13 @@ type RetryPolicy struct {
 }
 
 // NewRetryTransport returns a RoundTripper that retries failed requests
-// through base according to p. See stages/16-round-trippers/README.md.
+// through base (http.DefaultTransport if nil) according to p. See
+// stages/16-round-trippers/README.md.
 func NewRetryTransport(base http.RoundTripper, p RetryPolicy) http.RoundTripper {
 	// TODO(stage 16)
+	if base == nil {
+		base = http.DefaultTransport
+	}
 	return base
 }
 
@@ -101,7 +109,8 @@ type Event struct {
 
 // Watch streams changes to keys starting with prefix, calling fn for each.
 // It returns ctx.Err() when ctx is cancelled, fn's error if fn fails, or nil
-// when the server ends the stream.
+// when the server ends the stream. The client's Timeout must not apply to the
+// stream.
 func (c *Client) Watch(ctx context.Context, prefix string, fn func(Event) error) error {
 	return errNotImplemented
 }

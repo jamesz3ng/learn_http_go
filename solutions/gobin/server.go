@@ -94,12 +94,17 @@ func NewServer(cfg Config) *http.Server {
 // stops accepting connections, lets in-flight requests finish (up to
 // cfg.ShutdownTimeout), and returns nil if everything finished in time.
 func Run(ctx context.Context, ln net.Listener, cfg Config) error {
+	// Stage 24: a certificate without its key (or vice versa) is a mistake;
+	// say so rather than silently serving plain HTTP.
+	if (cfg.TLSCertFile == "") != (cfg.TLSKeyFile == "") {
+		return errors.New("gobin: set both TLSCertFile and TLSKeyFile, or neither")
+	}
 	srv := NewServer(cfg)
 
 	serveErr := make(chan error, 1)
 	go func() {
 		// Stage 24: TLS when a certificate is configured.
-		if cfg.TLSCertFile != "" || cfg.TLSKeyFile != "" {
+		if cfg.TLSCertFile != "" {
 			serveErr <- srv.ServeTLS(ln, cfg.TLSCertFile, cfg.TLSKeyFile)
 			return
 		}

@@ -132,8 +132,11 @@ func shouldRetry(resp *http.Response, err error) bool {
 // random value between half and all of it, so that many clients that failed
 // together don't all retry at the same instant.
 func backoff(p RetryPolicy, attempt int) time.Duration {
+	if p.BaseDelay <= 0 {
+		return 0
+	}
 	d := p.BaseDelay << attempt
-	if d <= 0 || d > p.MaxDelay { // d <= 0 catches overflow
+	if attempt > 62 || d <= 0 || d > p.MaxDelay { // d <= 0 catches overflow
 		d = p.MaxDelay
 	}
 	half := d / 2

@@ -103,30 +103,35 @@ func (a *app) logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w}
+		// Log in a deferred call so that a request aborted with
+		// panic(http.ErrAbortHandler) is still logged on its way out.
+		defer func() { a.logRequest(r, rec, start) }()
 		next.ServeHTTP(rec, r)
-
-		status := rec.status
-		if !rec.wroteHeader {
-			status = http.StatusOK
-			// Stage 17: the handler gave up because the client went away.
-			// 499 is nginx's convention for "client closed request".
-			if r.Context().Err() != nil {
-				status = 499
-			}
-		}
-		level := slog.LevelInfo
-		if status >= 500 {
-			level = slog.LevelError
-		}
-		a.log.LogAttrs(r.Context(), level, "request",
-			slog.String("method", r.Method),
-			slog.String("path", r.URL.Path),
-			slog.Int("status", status),
-			slog.Int64("bytes", rec.bytes),
-			slog.Duration("duration", time.Since(start)),
-			slog.String("request_id", RequestIDFrom(r.Context())),
-		)
 	})
+}
+
+func (a *app) logRequest(r *http.Request, rec *statusRecorder, start time.Time) {
+	status := rec.status
+	if !rec.wroteHeader {
+		status = http.StatusOK
+		// Stage 17: the handler gave up because the client went away.
+		// 499 is nginx's convention for "client closed request".
+		if r.Context().Err() != nil {
+			status = 499
+		}
+	}
+	level := slog.LevelInfo
+	if status >= 500 {
+		level = slog.LevelError
+	}
+	a.log.LogAttrs(r.Context(), level, "request",
+		slog.String("method", r.Method),
+		slog.String("path", r.URL.Path),
+		slog.Int("status", status),
+		slog.Int64("bytes", rec.bytes),
+		slog.Duration("duration", time.Since(start)),
+		slog.String("request_id", RequestIDFrom(r.Context())),
+	)
 }
 
 // --- panic recovery

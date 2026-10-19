@@ -141,7 +141,8 @@ func TestStage15_RecoversPanics(t *testing.T) {
 		t.Fatalf("even a panicking request should get an X-Request-Id header")
 	}
 	rec := lc.find(func(r map[string]any) bool { return r["msg"] == "panic recovered" })
-	if rec == nil || rec["level"] != "ERROR" || !strings.Contains(rec["panic"].(string), "boom") {
+	panicValue, _ := rec["panic"].(string)
+	if rec == nil || rec["level"] != "ERROR" || !strings.Contains(panicValue, "boom") {
 		t.Fatalf(`want an ERROR record with msg "panic recovered" and panic "boom", got %v`, rec)
 	}
 	if rec := lc.find(isRequest("/panic")); rec == nil || rec["status"] != float64(500) {

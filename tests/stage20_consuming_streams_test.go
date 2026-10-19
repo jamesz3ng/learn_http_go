@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -56,8 +57,9 @@ func TestStage20_Basic(t *testing.T) {
 	}
 
 	r := srv.last(t)
-	if r.Path != "/watch" || r.RawQuery != "prefix=us+er%3A" {
-		t.Fatalf("request was %s?%s, want /watch?prefix=us+er%%3A", r.Path, r.RawQuery)
+	q, _ := url.ParseQuery(r.RawQuery)
+	if r.Path != "/watch" || q.Get("prefix") != "us er:" {
+		t.Fatalf("request was %s?%s, want /watch with the query parameter prefix=\"us er:\" (query-encoded)", r.Path, r.RawQuery)
 	}
 	if a := r.Header.Get("Accept"); a != "text/event-stream" {
 		t.Fatalf("Accept = %q, want text/event-stream", a)
@@ -184,5 +186,30 @@ func TestStage20_ErrorStatus(t *testing.T) {
 	var apiErr *kvclient.APIError
 	if !errors.As(err, &apiErr) || apiErr.StatusCode != 503 || apiErr.Message != "watching is disabled" {
 		t.Fatalf("Watch on a 503 returned %v, want an *APIError with status 503 and the JSON message", err)
+	}
+}
+
+func TestStage20_IgnoresClientTimeout(t *testing.T) {
+	// The stream lasts longer than the http.Client's Timeout.
+	srv := newRecordingServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		rc := http.NewResponseController(w)
+		for i := range 4 {
+			io.WriteString(w, "event: put\ndata: {\"key\":\"k"+itoa(i)+"\",\"value\":\"v\"}\n\n")
+			rc.Flush()
+			time.Sleep(150 * time.Millisecond)
+		}
+	})
+	c := newClient(t)
+	c.Timeout = 300 * time.Millisecond
+	kv, err := kvclient.New(srv.URL, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	err = kv.Watch(context.Background(), "", func(kvclient.Event) error { n++; return nil })
+	if err != nil || n != 4 {
+		t.Fatalf("a 600ms stream through a client with Timeout 300ms: got %d of 4 events, err %v%s", n, err,
+			hint("Client.Timeout covers reading the whole body, so it kills long streams. Watch should use a copy of the client with Timeout 0 and rely on ctx"))
 	}
 }

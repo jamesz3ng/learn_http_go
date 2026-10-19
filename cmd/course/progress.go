@@ -117,3 +117,24 @@ func (p *progress) dueCards(now time.Time) []string {
 	}
 	return ids
 }
+
+// pruneOrphanCards forgets review cards whose question no longer exists
+// (question IDs come from the prompt text, so editing a question orphans its
+// card). Without this, status would count cards that review can't show.
+func (p *progress) pruneOrphanCards() {
+	known := map[string]bool{}
+	for n := 0; n <= lastStage; n++ {
+		qs, err := loadQuiz(n)
+		if err != nil {
+			continue
+		}
+		for _, q := range qs {
+			known[q.ID] = true
+		}
+	}
+	for id := range p.Cards {
+		if !known[id] {
+			delete(p.Cards, id)
+		}
+	}
+}

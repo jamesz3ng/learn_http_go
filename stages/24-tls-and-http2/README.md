@@ -119,7 +119,8 @@ you the certificate, e.g. to write a PEM file for `--cacert` as the stage tests 
 ## Your task
 
 **gobin:** when `cfg.TLSCertFile` and `cfg.TLSKeyFile` are both set, `Run`
-serves **HTTPS** with HTTP/2 available. Add `-cert` and `-key` flags to
+serves **HTTPS** with HTTP/2 available. (Setting only one of them is a
+mistake: return an error instead of quietly serving plain HTTP.) Add `-cert` and `-key` flags to
 `cmd/gobin`.
 
 **gocurl:**

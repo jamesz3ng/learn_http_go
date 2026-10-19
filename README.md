@@ -68,7 +68,7 @@ Then open [`stages/00-orientation/README.md`](stages/00-orientation/README.md).
 | `go run ./cmd/course` | progress overview and your next step |
 | `go run ./cmd/course test` | test stage 1 up to your current stage (earlier stages catch regressions) |
 | `go run ./cmd/course test 7` / `3-7` / `all` | test specific stages |
-| `go run ./cmd/course test -race` | same, with the race detector (needs cgo) |
+| `go run ./cmd/course test -race=false` | skip the race detector (it's on by default when cgo and a C compiler are available) |
 | `go run ./cmd/course quiz 7` | take stage 7's quiz |
 | `go run ./cmd/course review` | spaced-repetition review of questions that are due |
 

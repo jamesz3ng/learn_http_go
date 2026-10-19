@@ -22,6 +22,11 @@ func startRaw(t *testing.T) (addr string, ln net.Listener, served <-chan error) 
 	errc := make(chan error, 1)
 	go func() { errc <- rawhttp.Serve(ln) }()
 	t.Cleanup(func() { ln.Close() })
+	select {
+	case err := <-errc:
+		t.Fatalf("rawhttp.Serve returned immediately (%v); it should keep accepting connections until the listener is closed", err)
+	case <-time.After(30 * time.Millisecond):
+	}
 	return ln.Addr().String(), ln, errc
 }
 

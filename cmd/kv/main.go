@@ -45,6 +45,11 @@ func main() {
 		}
 		return ""
 	}
+	need := map[string]int{"put": 3, "get": 2, "delete": 2}
+	if n, ok := need[args[0]]; ok && len(args) != n {
+		flag.Usage()
+		os.Exit(2)
+	}
 	switch args[0] {
 	case "put":
 		created, err := c.Put(ctx, arg(1), []byte(arg(2)))

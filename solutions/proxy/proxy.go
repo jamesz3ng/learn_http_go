@@ -92,22 +92,25 @@ func New(cfg Config) (http.Handler, error) {
 // to the next one when a backend can't be reached at all.
 func (lb *balancer) RoundTrip(req *http.Request) (*http.Response, error) {
 	now := time.Now()
-	n := len(lb.backends)
-	start := int(lb.next.Add(1) - 1)
+	var healthy, down []*backend
+	for _, b := range lb.backends {
+		if b.healthy(now) {
+			healthy = append(healthy, b)
+		} else {
+			down = append(down, b)
+		}
+	}
 
-	// Healthy backends in round-robin order first; ones cooling down only
-	// as a last resort (they may have recovered).
+	// Rotate over the healthy backends only: rotating over all of them and
+	// skipping the dead one would hand its turns to its neighbour. Backends
+	// cooling down come last, as a last resort (they may have recovered).
 	var order []*backend
-	for i := range n {
-		if b := lb.backends[(start+i)%n]; b.healthy(now) {
-			order = append(order, b)
-		}
+	if len(healthy) > 0 {
+		start := int(lb.next.Add(1)-1) % len(healthy)
+		order = append(order, healthy[start:]...)
+		order = append(order, healthy[:start]...)
 	}
-	for i := range n {
-		if b := lb.backends[(start+i)%n]; !b.healthy(now) {
-			order = append(order, b)
-		}
-	}
+	order = append(order, down...)
 
 	// Only a request without a body can be safely re-sent: the first
 	// attempt may have consumed it.

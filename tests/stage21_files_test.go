@@ -137,7 +137,11 @@ func TestStage21_Upload(t *testing.T) {
 	byName := map[string]map[string]any{}
 	for _, f := range files {
 		m := object(t, f, "file entry")
-		byName[m["filename"].(string)] = m
+		name, ok := m["filename"].(string)
+		if !ok {
+			t.Fatalf(`each file entry needs a "filename" string, got %v`, m)
+		}
+		byName[name] = m
 	}
 	check := func(name string, data []byte, wantType string) {
 		m := byName[name]

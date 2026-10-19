@@ -121,6 +121,7 @@ func (c *Client) Watch(ctx context.Context, prefix string, fn func(Event) error)
 | big events | values over 64 KiB (up to 1 MiB) must work |
 | `fn` returns an error | stop, close the stream, return that error |
 | `ctx` cancelled | return promptly with an error matching `context.Canceled` |
+| client timeout | if the `*http.Client` has a `Timeout` (stage 10's default does), it must **not** cut the stream short: send the request with a copy of the client whose `Timeout` is 0 |
 | server ends the stream | return `nil` |
 
 ```sh

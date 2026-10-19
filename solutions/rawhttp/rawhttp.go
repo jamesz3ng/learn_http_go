@@ -7,7 +7,9 @@ package rawhttp
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -52,6 +54,7 @@ func handle(conn net.Conn) {
 	// Header lines until the empty line. Header names are case-insensitive,
 	// so normalise them before comparing.
 	var host string
+	var bodyLen int64
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil {
@@ -66,10 +69,18 @@ func handle(conn net.Conn) {
 			writeResponse(conn, 400, "Bad Request", "bad request\n")
 			return
 		}
-		if strings.EqualFold(strings.TrimSpace(name), "Host") {
+		switch {
+		case strings.EqualFold(strings.TrimSpace(name), "Host"):
 			host = strings.TrimSpace(value)
+		case strings.EqualFold(strings.TrimSpace(name), "Content-Length"):
+			bodyLen, _ = strconv.ParseInt(strings.TrimSpace(value), 10, 64)
 		}
 	}
+
+	// Read (and discard) the request body before answering. If we close the
+	// connection with unread bytes still waiting, the kernel resets it, and
+	// the client may lose our response. (net/http does the same, bounded.)
+	io.CopyN(io.Discard, r, min(bodyLen, 1<<20))
 
 	body := fmt.Sprintf("method=%s\ntarget=%s\nhost=%s\n", method, target, host)
 	writeResponse(conn, 200, "OK", body)

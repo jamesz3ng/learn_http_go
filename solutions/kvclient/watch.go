@@ -35,10 +35,12 @@ func (c *Client) Watch(ctx context.Context, prefix string, fn func(Event) error)
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("User-Agent", userAgent)
 
-	// NOTE: if c.hc has a Timeout, it applies to the whole stream, body
-	// included, and will cut a long watch short. Context cancellation is the
-	// right way to bound a stream's lifetime.
-	resp, err := c.hc.Do(req)
+	// http.Client.Timeout covers reading the whole body, so it would cut a
+	// long watch short (New's default client has one). Use a copy of the
+	// client without it: the caller bounds the stream with ctx instead.
+	hc := *c.hc
+	hc.Timeout = 0
+	resp, err := hc.Do(req)
 	if err != nil {
 		return err
 	}

@@ -99,7 +99,7 @@ Go has a built-in data-race detector. It instruments memory accesses and
 reports two goroutines touching the same memory without synchronisation:
 
 ```sh
-go run ./cmd/course test 9 -race     # or: go test -race -run TestStage09_ ./tests/
+go run ./cmd/course test 9    # -race is on automatically when cgo works; or: go test -race -run TestStage09_ ./tests/
 ```
 
 It needs cgo (a C compiler). It only finds races that actually happen while it

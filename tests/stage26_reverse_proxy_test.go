@@ -2,10 +2,13 @@ package tests
 
 import (
 	"bufio"
+	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,6 +28,18 @@ func backend(t *testing.T, name string) *recordingServer {
 			case <-r.Context().Done():
 			}
 			io.WriteString(w, "data: second\n\n")
+		case "/progress":
+			// A response with a known length that arrives in two parts.
+			first, rest := "first part\n", "second part\n"
+			w.Header().Set("Content-Length", itoa(len(first)+len(rest)))
+			io.WriteString(w, first)
+			http.NewResponseController(w).Flush()
+			select {
+			case <-time.After(3 * time.Second):
+			case <-r.Context().Done():
+				return
+			}
+			io.WriteString(w, rest)
 		default:
 			w.Header().Set("X-Backend", name)
 			io.WriteString(w, name+" "+r.Method+" "+r.URL.RequestURI())
@@ -60,7 +75,8 @@ func TestStage26_RoundRobin(t *testing.T) {
 	for range 9 {
 		resp, body := get(t, client, p.URL+"/x")
 		wantStatus(t, resp, 200, "GET through the proxy")
-		counts[strings.Fields(body)[0]]++
+		name, _, _ := strings.Cut(body, " ")
+		counts[name]++
 	}
 	if counts["a"] != 3 || counts["b"] != 3 || counts["c"] != 3 {
 		t.Fatalf("9 requests over 3 backends were distributed %v, want 3 each (round robin)", counts)
@@ -140,6 +156,68 @@ func TestStage26_Streaming(t *testing.T) {
 	}
 	if d := time.Since(start); d > 2*time.Second {
 		t.Fatalf("the first event took %v to come through the proxy; it was buffered%s", d,
-			hint("ReverseProxy.FlushInterval = -1 flushes after every write"))
+			hint("flush to the client after every write from the backend"))
+	}
+}
+
+func TestStage26_FlushesEveryResponse(t *testing.T) {
+	// Not just event streams: a slow response with a Content-Length must also
+	// reach the client as it arrives.
+	a := backend(t, "a")
+	p := startProxy(t, proxy.Config{Backends: []string{a.URL}})
+	start := time.Now()
+	resp, err := newClient(t).Get(p.URL + "/progress")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	line, _ := bufio.NewReader(resp.Body).ReadString('\n')
+	if line != "first part\n" {
+		t.Fatalf("first line = %q", line)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("the first part took %v to come through the proxy; it was buffered%s", d,
+			hint("httputil.ReverseProxy only auto-flushes streams of unknown length; set FlushInterval = -1 to flush after every write"))
+	}
+}
+
+func TestStage26_Cooldown(t *testing.T) {
+	a := backend(t, "a")
+	dead := closedPortURL(t)
+	deadAddr := strings.TrimPrefix(dead, "http://")
+	var deadDials atomic.Int64
+	tr := &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if addr == deadAddr {
+			deadDials.Add(1)
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, addr)
+	}}
+	t.Cleanup(tr.CloseIdleConnections)
+	p := startProxy(t, proxy.Config{Backends: []string{a.URL, dead}, Cooldown: time.Minute, Transport: tr})
+	client := newClient(t)
+	for range 10 {
+		resp, _ := get(t, client, p.URL+"/x")
+		wantStatus(t, resp, 200, "GET with one backend down")
+	}
+	if n := deadDials.Load(); n != 1 {
+		t.Fatalf("the dead backend was dialled %d times in 10 requests, want once%s", n,
+			hint("after a connection failure, skip that backend until Config.Cooldown has passed (use Config.Transport to reach backends)"))
+	}
+}
+
+func TestStage26_EvenSpreadWithBackendDown(t *testing.T) {
+	a, c := backend(t, "a"), backend(t, "c")
+	p := startProxy(t, proxy.Config{Backends: []string{a.URL, closedPortURL(t), c.URL}, Cooldown: time.Minute})
+	client := newClient(t)
+	get(t, client, p.URL+"/x") // discovers the dead backend
+	before := len(a.requests()) - len(c.requests())
+	for range 20 {
+		get(t, client, p.URL+"/x")
+	}
+	diff := len(a.requests()) - len(c.requests()) - before
+	if diff < -1 || diff > 1 {
+		t.Fatalf("with one backend down, 20 requests split %d/%d between the two healthy ones; round robin should alternate%s",
+			len(a.requests()), len(c.requests()),
+			hint("rotate over the healthy backends only, otherwise the one after the dead backend gets its share too"))
 	}
 }

@@ -168,6 +168,7 @@ Implement [`kvclient/kvclient.go`](../../kvclient/kvclient.go) (stage 10 section
 | `Delete(ctx, key)` | |
 | `List(ctx, prefix)` | `GET {base}/kv?prefix=...`; decode `{"keys": [...]}` |
 | errors | any non-2xx → `*APIError{StatusCode, Message}`; `Message` from the JSON `error` field if the body parses as JSON (whatever the `Content-Type` says: `http.Error` labels JSON bodies `text/plain`), or else the trimmed body text. A 404 also matches `errors.Is(err, ErrNotFound)` |
+| keys | `""`, `"."`, `".."` and keys over 256 bytes → an error, without sending a request (the first is the `/kv` collection itself; the dot segments are cleaned out of any URL path) |
 | headers | `User-Agent: kvclient/1.0` |
 | context | every request uses `ctx` (cancellation and deadlines work) |
 | connections | sequential calls reuse one connection, error paths included |

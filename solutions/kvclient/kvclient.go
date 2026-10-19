@@ -65,8 +65,15 @@ func New(baseURL string, hc *http.Client) (*Client, error) {
 // keyURL builds base + "/kv/" + key. url.PathEscape matters: without it a
 // key like "a/b" would become two path segments, and "a?b" would start a
 // query string.
-func (c *Client) keyURL(key string) string {
-	return c.base.JoinPath("kv", url.PathEscape(key)).String()
+//
+// Some keys can't be addressed at all: "" would mean the /kv collection
+// itself, and "." and ".." are path segments that JoinPath (and every server)
+// cleans away. Reject them rather than silently talking to the wrong URL.
+func (c *Client) keyURL(key string) (string, error) {
+	if key == "" || key == "." || key == ".." || len(key) > 256 {
+		return "", fmt.Errorf("kvclient: invalid key %q (must be 1-256 bytes, not \".\" or \"..\")", key)
+	}
+	return c.base.JoinPath("kv", url.PathEscape(key)).String(), nil
 }
 
 // do sends a request and returns the response if its status is 2xx.
@@ -114,7 +121,11 @@ func drainClose(body io.ReadCloser) {
 
 // Put stores value under key. created reports whether the key was new.
 func (c *Client) Put(ctx context.Context, key string, value []byte) (created bool, err error) {
-	resp, err := c.do(ctx, http.MethodPut, c.keyURL(key), bytes.NewReader(value))
+	u, err := c.keyURL(key)
+	if err != nil {
+		return false, err
+	}
+	resp, err := c.do(ctx, http.MethodPut, u, bytes.NewReader(value))
 	if err != nil {
 		return false, err
 	}
@@ -124,7 +135,11 @@ func (c *Client) Put(ctx context.Context, key string, value []byte) (created boo
 
 // Get returns the value stored under key.
 func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
-	resp, err := c.do(ctx, http.MethodGet, c.keyURL(key), nil)
+	u, err := c.keyURL(key)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +149,11 @@ func (c *Client) Get(ctx context.Context, key string) ([]byte, error) {
 
 // Delete removes key.
 func (c *Client) Delete(ctx context.Context, key string) error {
-	resp, err := c.do(ctx, http.MethodDelete, c.keyURL(key), nil)
+	u, err := c.keyURL(key)
+	if err != nil {
+		return err
+	}
+	resp, err := c.do(ctx, http.MethodDelete, u, nil)
 	if err != nil {
 		return err
 	}

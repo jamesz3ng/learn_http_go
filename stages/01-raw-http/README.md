@@ -79,7 +79,11 @@ if ok && strings.EqualFold(strings.TrimSpace(name), "Host") {
 
 (Why the first colon? Because values may contain colons: `Host: localhost:8080`.)
 
-You can ignore any request body for this stage.
+You don't need to *use* the request body. But if you close the connection
+while body bytes are still unread, the operating system may reset the
+connection, and the client can lose your response. So read any
+`Content-Length` header too, and discard that many bytes (capped, say at
+1 MiB) with `io.CopyN(io.Discard, r, n)` before you answer.
 
 ### Writing the response
 
@@ -146,7 +150,7 @@ func Serve(ln net.Listener) error
 | Parse | Read the request line and the header lines (up to the empty line). |
 | Respond 200 | Status line `HTTP/1.1 200 OK`. Headers `Content-Type: text/plain; charset=utf-8`, a correct `Content-Length`, `Connection: close`. Body: three lines, `method=<METHOD>\ntarget=<TARGET>\nhost=<Host header value>\n`. If there's no `Host` header, use `host=` with nothing after it. |
 | Respond 400 | If the request line doesn't have exactly three parts, or the version doesn't start with `HTTP/`: `HTTP/1.1 400 Bad Request` with body `bad request\n` (same headers). |
-| Close | Close the connection after responding. |
+| Close | Close the connection after responding (ideally after discarding any request body, as described in the Reading). |
 
 Example: for `GET /hello?x=1 HTTP/1.1` with `Host: example.com`, the body is
 
