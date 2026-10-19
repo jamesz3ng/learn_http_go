@@ -1,23 +1,26 @@
 # Stage 23: Graceful shutdown
 
 ## When does srv.Serve return after another goroutine calls srv.Shutdown(ctx)?
-* Immediately, with http.ErrServerClosed, while Shutdown is still waiting for requests to finish
+* Immediately, with http.ErrServerClosed
 - After all in-flight requests have finished
-- Never
-> If main exits when Serve returns, in-flight requests die anyway. Wait for
+- When Shutdown's context expires
+- Never: Serve only returns on a listener error
+> Serve returns while Shutdown is still waiting for requests to finish. If
+> main exits when Serve returns, in-flight requests die anyway. Wait for
 > Shutdown to return.
 
 ## What does srv.Shutdown do with requests that are in progress?
-* Waits for them to finish (until its context expires)
-- Cancels their contexts and returns
-- Cuts their connections immediately
+* Waits for them to finish, until its context expires
+- Cancels their contexts, then waits for them to return
+- Cuts their connections once the listeners are closed
 > Shutdown closes listeners and idle connections, then polls until active
 > connections become idle. Close is the one that cuts everything off.
 
 ## Does Shutdown cancel the contexts of active requests?
-- Yes
-* No: long-running handlers must be told to stop some other way
-> That's why streams need a signal such as a channel closed from a
+- Yes: Shutdown cancels them after closing the listeners
+* No: handlers must be told to stop some other way
+> Long-running handlers keep going until something else stops them. That's
+> why streams need a signal such as a channel closed from a
 > RegisterOnShutdown hook.
 
 ## Which signal do Kubernetes, systemd and Docker send first to stop a process?
@@ -26,34 +29,38 @@
 > SIGTERM, then SIGKILL (which can't be caught) after the grace period.
 
 ## Shutdown(ctx) returns context.DeadlineExceeded. What should you do?
-* Call srv.Close() to force the remaining connections closed, and report the error
+* Call srv.Close() and report the error
 - Call Shutdown again with a longer timeout
-- Nothing, the server has stopped
+- Nothing: the server has already stopped
 > When the grace period is over, remaining connections must be closed
-> explicitly.
+> explicitly: srv.Close() forces them closed.
 
 ## What does srv.RegisterOnShutdown(f) do?
-* Arranges for f to run (in a new goroutine) when Shutdown begins
-- Runs f after Shutdown completes
-- Runs f for every request during shutdown
+* Runs f in a new goroutine when Shutdown begins
+- Runs f once Shutdown has completed
+- Runs f for every request that arrives during shutdown
 > It's the hook for telling long-lived handlers (streams, hijacked
 > WebSocket connections) to wrap up.
 
 ## Why might cancelling Server.BaseContext at shutdown be the wrong tool?
-* It cancels every request's context, aborting the short in-flight requests you wanted to complete gracefully
-- BaseContext can't be cancelled
-- It only applies to new connections
+* It cancels every request, including short ones
+- BaseContext can't be cancelled once Serve starts
+- It only affects connections accepted afterwards
 > BaseContext is the parent of all request contexts. Cancelling it is
-> all-or-nothing.
+> all-or-nothing: it also aborts the short in-flight requests you wanted to
+> complete gracefully.
 
 ## Why does Run take a net.Listener instead of an address?
-* Tests can listen on port 0, learn the real address, and pass the listener in; it also allows socket activation
-- net.Listen is deprecated
-- Shutdown requires it
-> Injecting the listener separates "where to listen" from "how to serve".
+* Tests can listen on port 0 and pass the listener in
+- net.Listen is deprecated in favour of ListenAndServe
+- Shutdown can only close listeners passed in this way
+> Tests listen on port 0, learn the real address, and pass the listener in;
+> it also allows socket activation. Injecting the listener separates "where
+> to listen" from "how to serve".
 
 ## Why should Run treat http.ErrServerClosed as success?
-* It's what Serve always returns once Shutdown or Close is called: it means "stopped as requested"
-- Because the error is always nil
-- It indicates a crash that was recovered
-> Report it as nil; only other Serve errors are real failures.
+* It means the server stopped as requested
+- It means every in-flight request has finished
+- It means a handler panic was recovered
+> It's what Serve always returns once Shutdown or Close is called. Report it
+> as nil; only other Serve errors are real failures.

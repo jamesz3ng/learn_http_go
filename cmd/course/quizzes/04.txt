@@ -17,10 +17,10 @@
 > in r.Host and removed from r.Header.
 
 ## A request arrives for http://localhost:8080/get?x=1 over plain HTTP/1.1. What is r.URL.Host on the server?
-- "localhost:8080"
+- "localhost:8080" (copied from the Host header)
 * "" (the request line only had "/get?x=1")
-- "localhost"
-- "http://localhost:8080"
+- "localhost" (the port goes into r.URL.Port())
+- "http://localhost:8080" (scheme and host)
 > On the server, r.URL is parsed from the request target, which is normally
 > just path and query. Use r.Host for the host and r.TLS to know the scheme.
 
@@ -41,11 +41,12 @@
 > net.SplitHostPort understands the bracket syntax.
 
 ## Why shouldn't a server blindly use X-Forwarded-For as the client's IP?
-- It's deprecated
-* Any client can send that header with any value; trust it only when your own proxy sets it
+- It's deprecated and browsers no longer send it
+* Any client can send it with any value it likes
 - Go removes it before the handler runs
 - It contains the server's IP, not the client's
-> Headers are client-controlled. Only a proxy you operate (whose address you
+> Headers are client-controlled, so trust X-Forwarded-For only when your own
+> proxy sets it. Only a proxy you operate (whose address you
 > can check via RemoteAddr) should be trusted to report the original client.
 
 ## What does json.Marshal produce for a nil map[string][]string?

@@ -9,9 +9,9 @@
 > buffered reader (bufio.Reader.ReadString('\n')) instead of a single Read.
 
 ## Your handler writes "Content-Length: 5" but the body is "hello world". What does a keep-alive HTTP/1.1 client see?
-- The whole body "hello world"
-* The body "hello"; the remaining bytes are misread as the start of the next response
-- An immediate error before reading anything
+- The whole body "hello world"; the length is ignored
+* The body "hello"; " world" corrupts the next response
+- An error: the client rejects the length mismatch
 > The client trusts Content-Length: it reads 5 bytes and considers the
 > response complete. The leftover " world" stays on the connection and
 > corrupts the next exchange. Framing bugs like this are why net/http
@@ -51,11 +51,12 @@
 > Content-Length is a count of bytes on the wire, so len(body) is correct.
 
 ## Your accept loop is `for { conn, err := ln.Accept(); if err != nil { continue }; go handle(conn) }`. What goes wrong when the listener is closed?
-- Nothing, the loop exits
-* Accept fails immediately forever, so the loop spins at 100% CPU and Serve never returns
-- The program panics
-> After Close, Accept returns an error (net.ErrClosed) every time. Ignoring
-> it creates a hot loop. Return the error instead, as net/http's Server.Serve
+- Nothing: the loop exits once Accept fails
+* Accept keeps failing, so the loop spins at 100% CPU
+- The program panics on the next Accept call
+> After Close, Accept returns an error (net.ErrClosed) immediately, every
+> time. Ignoring it creates a hot loop that never returns. Return the error
+> instead, as net/http's Server.Serve
 > does (it only retries errors that are temporary, with a backoff).
 
 ## In net/http's source (server.go), which method contains the accept loop that starts `go c.serve(...)`?

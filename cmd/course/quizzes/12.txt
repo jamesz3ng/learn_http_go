@@ -13,11 +13,12 @@
 > final response".
 
 ## CheckRedirect returns your own errTooMany. What does client.Do return?
-* The last redirect response (body already closed) and a *url.Error wrapping errTooMany
-- nil and errTooMany unwrapped
-- The final response and nil
+* The last response and a *url.Error wrapping errTooMany
+- nil and errTooMany itself, unwrapped
+- The final response and a nil error
+- nil and a *url.Error wrapping errTooMany
 > The error is wrapped in *url.Error, so use errors.Is(err, errTooMany). The
-> response is returned too, with its body closed.
+> last redirect response is returned too, with its body already closed.
 
 ## Inside CheckRedirect(req, via), what is req.Response?
 * The redirect response that caused req to be created
@@ -35,18 +36,19 @@
 > dropped.
 
 ## You POST a body built from a plain io.Reader (no GetBody) and get "307". What happens?
-- Go buffers the body and re-sends it
-* Go doesn't follow: it returns the 307 response as the result
-- Go sends a POST with an empty body
-- Do returns an error
+- Go buffers the body and re-sends it to the new URL
+* Go returns the 307 response without following it
+- Go follows with a POST that has an empty body
+- Do returns an error saying the body can't be re-sent
 > A 307/308 requires re-sending the body, which needs req.GetBody. Without
 > it, the client returns the 307 instead of following.
 
 ## You set Authorization and get redirected from api.example.com to cdn.other.com. Is Authorization sent there?
-- Yes, all headers are copied
-* No: sensitive headers (Authorization, WWW-Authenticate, Cookie) are dropped when redirecting to a different domain
-- Only for 307/308
-> Go copies headers to redirects except sensitive ones going to a domain that
+- Yes: all headers are copied to every hop
+* No: it's dropped on a redirect to another domain
+- Only for 307/308, which repeat the request as-is
+> Go copies headers to redirects except sensitive ones (Authorization,
+> WWW-Authenticate, Cookie) going to a domain that
 > isn't the original or one of its subdomains, so a malicious redirect can't
 > harvest your credentials.
 

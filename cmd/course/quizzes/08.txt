@@ -1,17 +1,18 @@
 # Stage 8: Routing in depth
 
 ## "GET /status/{code}" is registered first, "GET /status/teapot" second. Which handles GET /status/teapot?
-- The first, because it was registered first
-* "GET /status/teapot", because a literal segment is more specific than a wildcard
-- It panics at registration: the patterns conflict
-> The most specific matching pattern wins, and registration order never
+- "GET /status/{code}", because it was registered first
+* "GET /status/teapot", the more specific pattern
+- Neither: registration panics, as the patterns conflict
+> A literal segment is more specific than a wildcard, and the most specific
+> matching pattern wins. Registration order never
 > matters. "/status/teapot" matches a strict subset of what "/status/{code}"
 > matches.
 
 ## What happens when you register both "GET /" and "/index.html" on one ServeMux?
 - "/index.html" wins for every method
-- "GET /" wins for GET requests
-* The second registration panics: they conflict, neither is more specific
+- "GET /" wins for GET, "/index.html" for the rest
+* The second registration panics with a conflict
 > Both match GET /index.html. "GET /" matches more paths; "/index.html"
 > matches more methods. Neither is a subset of the other, so they conflict,
 > and ServeMux reports it immediately by panicking.
@@ -40,9 +41,10 @@
 > slash. Register "/docs" too if you don't want that.
 
 ## What does ServeMux do with a request for /a/../get?
-- 404
-- Serves /a/../get literally
+- 404, because no /a/ route exists
+- Passes /a/../get to the handler unchanged
 * Redirects (301) to the cleaned path /get
+- Rejects it with 400 Bad Request
 > ServeMux sanitises paths: requests with "." or ".." segments or repeated
 > slashes are redirected to the clean equivalent.
 
@@ -61,6 +63,6 @@
 
 ## Does "GET /items/{id}" match a HEAD request for /items/7?
 * Yes, GET patterns also match HEAD
-- No, only GET
+- No, HEAD needs its own pattern
 > A GET pattern matches both GET and HEAD. The server discards the body for
 > HEAD responses.

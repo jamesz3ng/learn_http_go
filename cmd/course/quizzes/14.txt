@@ -9,24 +9,25 @@
 ## Which two methods make up the http.CookieJar interface?
 * SetCookies(u *url.URL, cookies []*http.Cookie)
 * Cookies(u *url.URL) []*http.Cookie
-- Save(path string) error
-- Get(name string) *http.Cookie
+- Save(path string, cookies []*http.Cookie) error
+- Get(u *url.URL, name string) *http.Cookie
 > The client calls Cookies before each request and SetCookies after each
 > response. Persistence isn't part of the interface.
 
 ## How should "-u alice:s3:cret" be split?
-* user "alice", password "s3:cret" (split at the first colon)
+* user "alice", password "s3:cret"
 - user "alice:s3", password "cret"
 - It's invalid: too many colons
 > Basic auth's user-id can't contain ':' but the password can, so split at
 > the first colon (strings.Cut).
 
 ## What does cookiejar.New(nil) lack compared with a browser's cookie store?
-* A public suffix list, so it can't stop a site setting cookies for a public suffix like co.uk
+* A public suffix list
 - Support for the Secure attribute
 - Support for expiry
 - Thread safety
-> golang.org/x/net/publicsuffix provides one. Without it, the jar still
+> Without one, it can't stop a site setting cookies for a public suffix like
+> co.uk. golang.org/x/net/publicsuffix provides one. Without it, the jar still
 > follows domain, path, expiry and Secure rules.
 
 ## Which line adds a cookie to an outgoing request without a jar?
@@ -44,8 +45,9 @@
 > "logged in" across requests.
 
 ## Where does Go's client store a Bearer token you want sent?
-- req.SetBearer(token)
+- req.SetBearerAuth(token)
 * req.Header.Set("Authorization", "Bearer "+token)
-- http.Client{Token: token}
+- req.Header.Set("Bearer", token)
+- req.Header.Set("Authorization", "Token "+token)
 > There's no special API: it's just a header. (A RoundTripper can add it to
 > every request: stage 16.)

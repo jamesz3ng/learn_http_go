@@ -18,11 +18,12 @@
 > Set req.ContentLength = info.Size() yourself if the server needs a length.
 
 ## What is req.GetBody used for?
-- Reading the response body
-* Getting a fresh copy of the request body so it can be re-sent (307/308 redirects, retries)
-- Validating the body before sending
+- Reading the response body after Do returns
+* Getting a fresh copy of the body to re-send it
+- Validating the body before it's sent
 > After the first attempt consumes req.Body, the client (or your retry logic)
-> calls GetBody for a new reader with the same content.
+> calls GetBody for a new reader with the same content, e.g. to follow a
+> 307/308 redirect or to retry.
 
 ## url.QueryEscape("a b") returns?
 = a+b
@@ -31,10 +32,10 @@
 
 ## Which encoding must you use for a value inside a URL path segment, like a key in /kv/{key}?
 - url.QueryEscape, because + means space everywhere
-* url.PathEscape: in a path, "+" is a literal plus and "/" must be escaped as %2F
-- No escaping is needed
-> In paths, "+" has no special meaning and "/" separates segments. PathEscape
-> encodes for a single segment.
+* url.PathEscape, which encodes a single segment
+- No escaping: the mux decodes whatever arrives
+> In paths, "+" is a literal plus and "/" separates segments, so a "/" inside
+> a key must be escaped as %2F. PathEscape encodes for a single segment.
 
 ## You send a body and never set Content-Type. What does Go send?
 - application/octet-stream
@@ -58,8 +59,8 @@
 > -G moves the data into the query string and switches the method to GET.
 
 ## Why do the -d, --data-binary and --data-urlencode flags append to ONE shared slice in gocurl?
-* To keep the order the user gave across different flags when joining with &
-- Because the flag package requires it
-- To save memory
+* To keep the user's order across different flags
+- Because the flag package requires a single slice
+- To save memory compared with three slices
 > Separate slices would lose the interleaving: "-d a --data-binary b -d c"
 > must become "a&b&c".

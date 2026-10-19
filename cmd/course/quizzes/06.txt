@@ -1,9 +1,11 @@
 # Stage 6: Request bodies on the server
 
 ## A handler calls io.ReadAll(r.Body) twice. What does the second call return?
-- The same bytes again
-* An empty slice: the body is a stream that's already been consumed
-- An error: the body was closed
+- The same bytes again, cached by the server
+* An empty slice and a nil error
+- An error: the first ReadAll closed the body
+> The body is a stream, and the first call already consumed it, so the
+> second sees EOF straight away (which ReadAll doesn't report as an error).
 > r.Body reads from the connection once. If you need the bytes twice, keep
 > the slice from the first read (or replace r.Body with a reader over it).
 
@@ -26,25 +28,28 @@
 > first, so r.Form.Get("q") is also "2" and r.Form["q"] is ["2", "1"].
 
 ## Why use mime.ParseMediaType instead of comparing Content-Type with ==?
-* Content-Type can carry parameters like "; charset=utf-8" or "; boundary=..."
-- Content-Type is case-sensitive
-- r.Header.Get lowercases values
-> "application/json; charset=utf-8" != "application/json". ParseMediaType
-> returns the bare (lower-cased) media type plus the parameters.
+* Content-Type can carry parameters after a ";"
+- Content-Type values are case-sensitive
+- r.Header.Get lower-cases header values
+> Content-Type can carry parameters like "; charset=utf-8" or ";
+> boundary=...", and "application/json; charset=utf-8" != "application/json".
+> ParseMediaType returns the bare (lower-cased) media type plus the
+> parameters.
 
 ## What does the argument to r.ParseMultipartForm(32 << 20) limit?
-- The maximum size of the request body
-* How much of the files is kept in memory; the rest spills into temporary files on disk
-- The maximum number of files
-- The size of each file
-> It's a memory threshold, not a body limit. Use MaxBytesReader to cap the
+- The maximum size of the whole request body
+* How much file data is kept in memory
+- The maximum number of files in the form
+- The maximum size of each uploaded file
+> It's a memory threshold, not a body limit: file data beyond it spills into
+> temporary files on disk. Use MaxBytesReader to cap the
 > total size.
 
 ## Which statements about r.FormValue("x") are true?
 * It parses the form (and multipart form) automatically if needed
-* It silently ignores parse errors, including "request body too large"
-- It returns an error if the field is missing
-- It only looks at the query string
+* It silently ignores parse errors, including "body too large"
+- It returns an error if the field is missing from the form
+- It only looks at the query string, never at the body
 > FormValue is convenient but swallows errors. Call ParseForm or
 > ParseMultipartForm yourself when you need to report them.
 
@@ -58,16 +63,18 @@
 > StatusRequestEntityTooLarge).
 
 ## What does the pattern "/anything/{path...}" match?
-- Only /anything/
+- Only /anything/ itself
 - /anything/ followed by exactly one segment
-* /anything/ followed by any remaining path, including slashes, e.g. /anything/a/b/c
-> A {name...} wildcard must come last and matches the rest of the path.
+* /anything/ followed by any remaining path
+> A {name...} wildcard must come last and matches the rest of the path,
+> including slashes, e.g. /anything/a/b/c.
 > r.PathValue("path") returns it, e.g. "a/b/c".
 
 ## Decoding {"n": 12345678901234567890} into an `any` gives n as a float64. What do you lose?
-- Nothing
-* Precision: float64 can't represent every integer above 2^53 exactly
-- The sign
-> JSON numbers decode as float64 by default. Use json.Decoder.UseNumber
+- Nothing: float64 holds any integer up to 1.8e308
+* Precision: the low digits get rounded
+- The sign: the value overflows and turns negative
+> JSON numbers decode as float64 by default, and float64 can't represent
+> every integer above 2^53 exactly. Use json.Decoder.UseNumber
 > (json.Number) or a typed struct field (int64, big.Int) to keep large
 > integers exact.

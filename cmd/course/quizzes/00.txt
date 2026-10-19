@@ -2,11 +2,12 @@
 
 ## In an HTTP/1.1 message, what marks the end of the header section?
 - A line containing only "END"
-* An empty line (CRLF immediately after the previous line's CRLF)
+* An empty line (a bare CRLF)
 - The Content-Length header
 - The first byte of the body
-> Headers are followed by an empty line, i.e. the bytes "\r\n\r\n" end the
-> header section. Everything after that is the body (if any).
+> Headers are followed by an empty line: a CRLF straight after the previous
+> line's CRLF, so the bytes "\r\n\r\n" end the header section. Everything
+> after that is the body (if any).
 
 ## A response has no Content-Length and no Transfer-Encoding header. How does an HTTP/1.1 client know where the body ends?
 - It can't; the response is invalid
@@ -52,13 +53,14 @@
 > You'll implement this in stage 21.
 
 ## What does HTTP/2 change compared to HTTP/1.1?
-- The meaning of methods and status codes
-* The wire format: binary frames, multiplexed streams and compressed headers, with the same semantics
-- It replaces TCP with UDP
-- Headers are no longer allowed
+- The semantics: new methods and status codes, same text framing
+* The framing: binary frames and multiplexed streams, same semantics
+- The transport: it runs over QUIC on UDP instead of TCP
+- The connection model: one TCP connection per request, never reused
 > HTTP/2 keeps HTTP semantics (methods, status codes, headers, bodies) and
-> changes how they're encoded on the connection. HTTP/3 is the version that
-> moves to QUIC over UDP.
+> changes how they're encoded on the connection: binary frames, many
+> multiplexed streams on one connection, and compressed headers. HTTP/3 is
+> the version that moves to QUIC over UDP.
 
 ## In Go, which interface must a value implement to answer HTTP requests on the server side?
 = http.Handler
@@ -68,9 +70,9 @@
 
 ## On the client side, which part of net/http keeps a pool of open connections and handles TLS and HTTP/2?
 - http.Client
-* http.Transport (an http.RoundTripper)
+* http.Transport
 - http.Request
 - http.DefaultServeMux
 > http.Client applies policy (redirects, cookies, timeout) and delegates the
-> actual exchange to its Transport, a RoundTripper. *http.Transport manages
-> the connection pool, dialing, TLS, proxies and HTTP/2.
+> actual exchange to its Transport, an http.RoundTripper. *http.Transport
+> manages the connection pool, dialing, TLS, proxies and HTTP/2.

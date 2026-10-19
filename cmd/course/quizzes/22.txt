@@ -1,14 +1,15 @@
 # Stage 22: Downloads, uploads and resuming
 
 ## You resume with Range: bytes=40- and the server answers 200 OK with the full file. What must you do?
-* Truncate the file and write the whole body: the server ignored the Range
+* Truncate the file and write the whole body
 - Append the body to the partial file
-- Report an error
+- Report an error: the resume failed
+> The server ignored the Range and sent everything, which is still usable.
 > Appending would duplicate the first 40 bytes. Only a 206 response means
 > "here's the part from byte 40".
 
 ## A resume request gets 416 Range Not Satisfiable. What does that usually mean for -C -?
-* The local file is already complete (the range starts at or past the end)
+* The local file is already complete
 - The server doesn't support ranges
 - The file was deleted on the server
 > The requested start offset equals (or exceeds) the remote size. Leave the
@@ -21,24 +22,26 @@
 > Use CreatePart with your own textproto.MIMEHeader to set a better type.
 
 ## What happens if you forget mw.Close() on a multipart.Writer?
-* The final boundary is never written, so the body is malformed and the server's parser fails
-- Nothing; Close is only for files
-- The boundary is regenerated
-> Close writes the closing "--boundary--" line.
+* The final boundary is never written
+- Nothing; Close only matters for file parts
+- A new boundary is generated for the next part
+> Close writes the closing "--boundary--" line. Without it the body is
+> malformed and the server's parser fails.
 
 ## Streaming a multipart upload through io.Pipe instead of a bytes.Buffer means...
-* Constant memory use, but no Content-Length (chunked) and no GetBody (no automatic replay on 307 or retry)
-- The same as a bytes.Buffer
-- The upload can't be cancelled
-> A pipe is a stream of unknown length that can only be read once. That's the
-> price of not buffering.
+* Constant memory, but no Content-Length and no GetBody
+- The same framing and replay as a bytes.Buffer
+- Constant memory, but the upload can't be cancelled
+> A pipe is a stream of unknown length that can only be read once, so the
+> body is sent chunked and can't be replayed automatically on a 307 or a
+> retry. That's the price of not buffering.
 
 ## How does pw.CloseWithError(err) affect the HTTP client reading the pipe?
-* Its next Read returns err, so the request fails instead of sending a truncated body
-- The client retries
-- The error is ignored and EOF is returned
+* Its next Read returns err, failing the request
+- The client retries the request from the start
+- The error is ignored and Read returns io.EOF
 > CloseWithError(nil) is a normal EOF; a non-nil error propagates to the
-> reader.
+> reader, so the request fails instead of sending a truncated body.
 
 ## Which flags open a file for appending, creating it if needed?
 * os.O_CREATE|os.O_WRONLY|os.O_APPEND
@@ -55,8 +58,9 @@
 > to application/octet-stream yourself.
 
 ## Why check that -F files exist before starting the request?
-* So the failure is clean (exit 26) instead of an aborted, half-sent upload
-- Because the pipe can't read files
-- Because os.Open is slow
-> Validating inputs up front gives better errors and avoids sending garbage
-> to the server.
+* So a missing file fails before anything is sent
+- Because the pipe can't open files on its own
+- Because os.Open is too slow to call mid-request
+> The failure is then clean (exit 26) instead of an aborted, half-sent upload.
+> Validating inputs up front gives better errors and avoids sending garbage to
+> the server.

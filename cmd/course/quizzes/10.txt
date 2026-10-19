@@ -6,20 +6,25 @@
 > becomes %20, so the key stays one segment.
 
 ## Your SDK builds the URL with base + "/kv/" + key. Which keys break it?
-* "a/b": becomes two path segments
-* "x?y": "?" starts a query string
-* "100%": "%" starts an escape sequence
-- "hello": fine
+* "a/b"
+* "x?y"
+* "100%"
+- "hello"
+- "a_b-c.d"
+> "a/b" becomes two path segments, the "?" in "x?y" starts a query string,
+> and the "%" in "100%" starts an escape sequence. Letters, digits and
+> "_", "-", "." are safe unescaped.
 > Always escape data before putting it into a URL, with url.PathEscape for
 > path segments and url.Values.Encode for queries.
 
 ## How can a single *APIError value satisfy errors.Is(err, ErrNotFound)?
 - It can't; you must return ErrNotFound itself
-* Give *APIError an `Is(target error) bool` method returning true for ErrNotFound when StatusCode is 404
-- Embed ErrNotFound in the struct
-- Make APIError a string type
+* Give *APIError an `Is(target error) bool` method
+- Embed ErrNotFound as a field in the struct
+- Make APIError a string type holding the 404 text
 > errors.Is walks the chain and, at each error, also calls its Is method if
-> it has one. That lets a typed error match a sentinel.
+> it has one. That lets a typed error match a sentinel: have Is return true
+> for ErrNotFound when StatusCode is 404.
 
 ## Which call extracts the details from an error that might be a wrapped *APIError?
 - apiErr := err.(*APIError)
@@ -30,18 +35,20 @@
 > type and stores it. A type assertion only checks the outermost error.
 
 ## Why should New accept an *http.Client instead of always using http.DefaultClient?
-* So callers can set timeouts and transports (retries, proxies) and tests can inject fakes
-- http.DefaultClient can't send PUT requests
-- It's required for HTTPS
-> Injecting the client keeps the SDK flexible and testable. DefaultClient
-> has no timeout and is shared global state.
+* So callers and tests can supply their own client
+- http.DefaultClient can't send PUT or DELETE requests
+- A custom *http.Client is required for HTTPS
+> Callers can set timeouts and transports (retries, proxies), and tests can
+> inject fakes. Injecting the client keeps the SDK flexible and testable.
+> DefaultClient has no timeout and is shared global state.
 
 ## url.URL.JoinPath treats its arguments as...
 - Unescaped text that it escapes for you
-* Already-escaped path text (it also cleans "." and ".." segments)
-- Query parameters
+* Already-escaped path text
+- Query parameters to append after "?"
 > JoinPath joins onto EscapedPath() and re-parses the result, so escape each
-> segment yourself (url.PathEscape) first.
+> segment yourself (url.PathEscape) first. It also cleans "." and ".."
+> segments.
 
 ## A Put gets 204 No Content. Must you still close resp.Body?
 * Yes: always close bodies, even empty ones
@@ -51,15 +58,17 @@
 > keeps the habit consistent. For a 204 it's http.NoBody.
 
 ## Why read error response bodies through io.LimitReader?
-* An error page (from a proxy, say) can be huge; you only need enough for a message
-- It's required to reuse connections
+* Error bodies can be huge, and you need only a little
+- LimitReader is required to reuse the connection
 - Because error bodies are always gzip-compressed
-> Bound what you read from untrusted input. 4 KiB is plenty for an error
-> message.
+> An error page (from a proxy, say) can be huge; you only need enough for a
+> message. Bound what you read from untrusted input. 4 KiB is plenty for an
+> error message.
 
 ## Is your kvclient.Client safe to use from many goroutines at once?
-* Yes, if it never mutates its own fields after New; http.Client is safe for concurrent use
+* Yes, if it never mutates its fields after New
 - No, every goroutine needs its own Client
-- Only with a mutex around every call
-> A Client holding an immutable base URL and an *http.Client can be shared
+- Only with a mutex held around every call
+> http.Client is safe for concurrent use, so a Client holding an immutable
+> base URL and an *http.Client can be shared
 > freely. Sharing it also shares the connection pool, which you want.

@@ -2,18 +2,20 @@
 
 ## How do Go HTTP handlers run?
 - One at a time, in the order requests arrive
-* Concurrently: each connection (and each HTTP/2 stream) is served in its own goroutine
+* Concurrently, each in its own goroutine
 - In a fixed-size pool of worker goroutines
+> Each connection (and each HTTP/2 stream) is served in its own goroutine.
 > Any number of handler calls can run at the same time, so shared state must
 > be synchronised.
 
 ## Two handlers write to the same plain map at the same time. What can happen?
-* The runtime may stop the whole process with "fatal error: concurrent map writes"
+* The runtime may abort with "concurrent map writes"
 * Data may be silently corrupted
 - Nothing: Go maps are safe for concurrent use
-- A panic that recover() can catch
+- A panic that a recover() in the handler can catch
 > Map races are undefined behaviour. The runtime catches some of them and
-> aborts the program, and that fatal error can't be recovered.
+> stops the whole process with "fatal error: concurrent map writes", and
+> that fatal error can't be recovered.
 
 ## Which status code fits "PUT stored a NEW resource"?
 = 201
@@ -35,10 +37,12 @@
 > Go enforces that 1xx, 204 and 304 responses have no body.
 
 ## Why is PUT a better fit than POST for "store value under the key the client chose"?
-* PUT is idempotent and targets the URL the client names; POST lets the server pick the URL and isn't idempotent
-- POST can't carry a body
-- PUT is faster
-> Idempotency means a client (or proxy) can safely retry a PUT that timed out.
+* PUT is idempotent and targets the URL the client names
+- POST requests aren't allowed to carry a body
+- PUT responses are cached by proxies, POST ones never
+- PUT is faster because servers skip parsing it
+> POST lets the server pick the URL and isn't idempotent. Idempotency means
+> a client (or proxy) can safely retry a PUT that timed out.
 > Retrying a POST might create something twice.
 
 ## What's wrong with this handler?
@@ -50,11 +54,12 @@ func (a *app) put(w http.ResponseWriter, r *http.Request) {
     a.data[r.PathValue("key")] = b
 }
 ```
-- Nothing
-* It holds the lock while reading the body, so one slow client blocks every other request
-- RWMutex is required for maps
+- Nothing: defer Unlock makes it correct
+* It holds the lock while reading the body
+- Maps need an RWMutex, not a plain Mutex
 - PathValue is not safe to call under a lock
-> Do I/O first, then lock only for the map update. (It also ignores the read
+> One slow client then blocks every other request. Do I/O first, then lock
+> only for the map update. (It also ignores the read
 > error and doesn't limit the body size.)
 
 ## Which command runs the stage 9 tests with Go's race detector?
@@ -66,8 +71,9 @@ func (a *app) put(w http.ResponseWriter, r *http.Request) {
 > during the run, so concurrent tests matter.
 
 ## You return the stored []byte from GET without copying it. When is that safe?
-* When nothing ever modifies a stored slice after it's put in the map (PUT always stores a fresh slice)
-- Never
-- Only with an RWMutex
-> Sharing immutable data is safe. The danger is a later write into the same
+* When stored slices are never modified after a PUT
+- Never: sharing a slice between goroutines is a race
+- Only when the map is guarded by an RWMutex
+> Sharing immutable data is safe, and PUT always stores a fresh slice rather
+> than writing into an old one. The danger is a later write into the same
 > backing array while another goroutine reads it.

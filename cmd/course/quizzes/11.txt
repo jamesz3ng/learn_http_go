@@ -25,38 +25,43 @@
 > in users' browsers long after you fix it.
 
 ## Is 304 Not Modified a redirect?
-- Yes, it redirects to the cached URL
-* No: it answers a conditional request with "your cached copy is still valid"
-> 304 sits in the 3xx class but has no Location. It belongs with
+- Yes: it redirects the client to its cached URL
+* No: it says the cached copy is still valid
+- Yes: its Location points at the unchanged resource
+> 304 sits in the 3xx class but has no Location. It answers a conditional
+> request with "your cached copy is still valid", so it belongs with
 > conditional requests (stage 21).
 
 ## A request for /redirect/1 calls http.Redirect(w, r, "get", 302). What Location is sent?
 - get
 - /get
 * /redirect/get
+- /redirect/1/get
 > http.Redirect resolves a relative path (one without a leading slash)
 > against the directory of the request path, /redirect/, and cleans the
 > result.
 
 ## Why is building an absolute Location from r.Host risky in a real app?
-* r.Host comes from the client; a forged Host can poison caches and send other users to an attacker's host
-- r.Host is always empty
-- Location must always be relative
-> Use a configured canonical base URL for absolute links. Never trust
+* r.Host comes from the client and can be forged
+- r.Host is empty for HTTP/1.1 requests
+- Location headers must always be relative paths
+> A forged Host can poison caches and send other users to an attacker's
+> host. Use a configured canonical base URL for absolute links. Never trust
 > client-supplied Host values for anything security-relevant.
 
 ## What is an "open redirect"?
-* An endpoint that redirects to any URL taken from the request, letting attackers craft links on your domain that land on theirs
-- A redirect without a Location header
-- A redirect that follows itself forever
-- A 307 that keeps the request body
+* An endpoint that redirects to any URL taken from the request
+- A redirect response sent without a Location header
+- A redirect loop that keeps pointing back at itself
+- A 307 that keeps the request method and body
+> It lets attackers craft links on your domain that land on theirs.
 > Restrict targets to relative paths or an allowlist of hosts, and watch out
 > for "//evil.com", which is a URL with a host.
 
 ## Besides setting Location and the status, what does http.Redirect write for GET requests?
 * A short HTML body with a link to the new location
-- Nothing
-- A JSON body {"location": ...}
-- A Refresh header
+- Nothing: the body is left empty
+- A JSON body {"location": "<new URL>"}
+- A Refresh header pointing at the new URL
 > The tiny HTML body serves clients that don't follow redirects
 > automatically. The URL in it is HTML-escaped.

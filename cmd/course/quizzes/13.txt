@@ -2,7 +2,7 @@
 
 ## Which http.Cookie field value deletes the cookie on the client?
 - MaxAge: 0
-* MaxAge: -1 (which writes Max-Age=0)
+* MaxAge: -1
 - Value: ""
 - Expires: time.Time{}
 > In Go, MaxAge 0 means "not specified" (a session cookie). Any negative
@@ -23,24 +23,26 @@
 
 ## A request arrives with no Authorization header at an endpoint that requires login. Which response is right?
 * 401 Unauthorized with a WWW-Authenticate header
-- 403 Forbidden
-- 404 Not Found
-- 400 Bad Request
+- 401 Unauthorized with no other headers
+- 403 Forbidden with a WWW-Authenticate header
+- 400 Bad Request, since a required header is missing
 > 401 means "unauthenticated: tell me who you are", and must say how
 > (WWW-Authenticate). 403 is for an authenticated client that isn't allowed.
 
 ## Why use subtle.ConstantTimeCompare instead of == for passwords and tokens?
-* == can return as soon as a byte differs, and that timing difference can leak the secret
-- == doesn't work on byte slices
-- ConstantTimeCompare is faster
-> Constant-time comparison takes the same time wherever the first difference
-> is. Compare the username and password before deciding, too.
+* == can leak the secret through its timing
+- == compares string pointers, not the bytes
+- ConstantTimeCompare is faster for long inputs
+> == can return as soon as a byte differs, and that timing difference can leak
+> the secret. Constant-time comparison takes the same time wherever the first
+> difference is. Compare the username and password before deciding, too.
 
 ## What's in a Basic Authorization header?
-- The password hashed with SHA-256
-* "Basic " + base64("user:password"): an encoding, not encryption
-- A signed token
-> Anyone who sees the header can decode it, which is why Basic auth is only
+- "Basic " + sha256("user:password") in hex
+* "Basic " + base64("user:password")
+- "Basic " + an HMAC-signed token for the user
+> base64 is an encoding, not encryption. Anyone who sees the header can
+> decode it, which is why Basic auth is only
 > acceptable over HTTPS.
 
 ## How do you read one cookie named "session" on the server?
@@ -52,16 +54,19 @@
 > slice of all cookies.
 
 ## A client edits its cookie from "role=user" to "role=admin". How do you prevent trusting it?
-* Sign cookie values (e.g. HMAC) and verify the signature, or store state server-side and keep only a random session ID in the cookie
-- Set HttpOnly
-- Set Secure
-- Use SameSite=Strict
+* Sign the value (e.g. HMAC), or keep the state server-side
+- Set HttpOnly so the client can't change it
+- Set Secure so only HTTPS can carry it
+- Use SameSite=Strict so other sites can't send it
+> Sign cookie values (e.g. HMAC) and verify the signature, or store state
+> server-side and keep only a random session ID in the cookie.
 > Cookies are client-controlled storage. HttpOnly, Secure and SameSite
 > limit who can read or send them, not what the owner can write.
 
 ## What does SameSite=Lax mainly defend against?
-* Cross-site request forgery (CSRF): the cookie isn't sent on most cross-site sub-requests and POSTs
+* Cross-site request forgery (CSRF)
 - Cross-site scripting (XSS)
 - Eavesdropping on the network
 > With Lax the cookie still goes with top-level GET navigations from other
-> sites, but not with cross-site POSTs, iframes or fetches.
+> sites, but not with cross-site POSTs, iframes or fetches, so a forged
+> cross-site request arrives without it.

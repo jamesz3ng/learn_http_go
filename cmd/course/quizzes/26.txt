@@ -12,14 +12,15 @@
 
 ## A request carries "Connection: X-Secret" and "X-Secret: 1". Should a proxy forward X-Secret?
 * No: listing it in Connection makes it hop-by-hop
-- Yes, it's a custom header
+- Yes: only the standard hop-by-hop headers are removed
 > Senders use Connection to mark extra headers as connection-specific;
 > proxies must remove them.
 
 ## Why should a proxy send backend requests with a RoundTripper rather than an http.Client?
-* A Client follows redirects and applies a cookie jar; a proxy must pass 3xx responses and Set-Cookie through to its client
-- Clients can't send request bodies
-- RoundTrippers are faster
+* A Client would follow redirects and apply a cookie jar
+- An http.Client can't forward a request's body
+- A RoundTripper reuses connections; a Client doesn't
+> A proxy must pass 3xx responses and Set-Cookie through to its client.
 > The proxy's own client is the one that should decide about redirects and
 > cookies.
 
@@ -30,37 +31,42 @@
 > means upstream was too slow.
 
 ## When is it safe to transparently retry a request on another backend?
-* When the connection to the first backend failed (the request was never sent) and the request has no body to re-send
-- Always, for any error
-- Only for POST requests
-- Never
+* When the dial failed and the request has no body
+- Always, for any error from the backend
+- Only for POST requests, which carry a body
+- Never: a proxy must not retry anything
+> If the connection to the first backend failed, the request was never sent.
 > If the first backend received the request, it may have acted on it. An
 > inbound body is a one-shot stream, so body-less requests are the safe case.
 
 ## What does httputil.ProxyRequest.SetURL do to the outbound Host header?
-* Sets it to the target's host (the original host can still travel in X-Forwarded-Host)
-- Keeps the client's Host
-- Removes it
-> To keep the inbound Host instead, set pr.Out.Host = pr.In.Host after
+* Sets it to the target's host
+- Keeps the client's original Host
+- Removes it from the request
+> The original host can still travel in X-Forwarded-Host (pr.SetXForwarded
+> sets it). To keep the inbound Host instead, set pr.Out.Host = pr.In.Host after
 > calling SetURL.
 
 ## Why is Rewrite preferred over Director in httputil.ReverseProxy?
-* With Rewrite, client-supplied X-Forwarded headers are stripped first and hop-by-hop removal can't undo your changes
-- Director is removed in recent Go versions
-- Rewrite is required for streaming
+* Rewrite runs after the proxy's own header clean-up
+- Director was removed in recent Go versions
+- Only Rewrite supports streaming responses
+> With Rewrite, client-supplied X-Forwarded headers are stripped first and
+> hop-by-hop removal can't undo your changes.
 > Director runs before some of ReverseProxy's own header processing, which
 > has caused subtle security bugs. Rewrite (Go 1.20) fixes the ordering.
 
 ## Two gobin backends each have their own in-memory key-value store behind a round-robin proxy. A client PUTs a key, then GETs it. What happens?
-* The GET hits the other backend about half the time and gets 404
-- The proxy merges the stores
-- The PUT goes to both backends
-> Stateful backends need shared storage, replication, or routing that keeps
+* About half the time the GET gets a 404
+- The proxy merges the stores, so the GET finds it
+- The PUT goes to both backends, so the GET finds it
+> About half the time the GET hits the other backend, which never saw the
+> PUT. Stateful backends need shared storage, replication, or routing that keeps
 > each key on one backend (e.g. consistent hashing).
 
 ## What does ReverseProxy.FlushInterval = -1 do?
-* Flushes to the client after every write from the backend
-- Disables flushing
-- Flushes once per second
+* Flushes to the client after every write
+- Disables periodic flushing entirely
+- Flushes once per second, the default
 > Streams (text/event-stream, unknown-length bodies) are flushed immediately
 > regardless; -1 makes it unconditional.

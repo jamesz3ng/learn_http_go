@@ -1,18 +1,18 @@
 # Stage 19: Streaming responses and SSE
 
 ## A handler writes a short line, then sleeps 5s, then writes more. Without flushing, when does the client get the first line?
-- Immediately
-* When the handler returns (or the write buffer fills)
-- After exactly 5 seconds
+- Immediately, as soon as Write returns
+* When the handler returns or the buffer fills
+- After 5 seconds, when the sleep ends
 > ResponseWriter buffers output. Flush (via http.NewResponseController) to
 > send it immediately.
 
 ## A handler flushes after its first write and keeps writing. How is the HTTP/1.1 response framed?
-* Transfer-Encoding: chunked, chosen automatically because the length isn't known yet
-- Content-Length, computed when the handler returns
-- The connection is closed to mark the end
+* Transfer-Encoding: chunked
+- Content-Length, set at the end
+- Closing the connection marks the end
 > Once headers go out before the handler finishes, Go can't know the length,
-> so it uses chunked encoding.
+> so it chooses chunked encoding automatically.
 
 ## How do you lift the server's WriteTimeout for one long-lived streaming response?
 * http.NewResponseController(w).SetWriteDeadline(time.Time{})
@@ -35,35 +35,38 @@
 > header when it reconnects.
 
 ## Lines starting with ":" in an SSE stream are...
-* Comments, ignored by clients; useful as keepalives
-- Field continuations
-- Event names
-> Comments keep idle connections from being closed by proxies and load
-> balancers.
+* Comments, which clients ignore
+- Continuations of the previous field
+- Event names, short for "event:"
+> Comments are useful as keepalives: they keep idle connections from being
+> closed by proxies and load balancers.
 
 ## Why must publishing to watchers never block?
-* Otherwise one slow watcher would stall every PUT and DELETE for all clients
-- Because channels can't block
-- Because the race detector forbids it
-> Use a non-blocking send (select with default) and drop watchers whose
-> buffer is full.
+* One slow watcher would stall every write
+- A blocked channel send panics once the buffer fills
+- Because the race detector forbids blocking sends
+> Publishing happens inside PUT and DELETE, so a blocked send would stall them
+> for all clients. Use a non-blocking send (select with default) and drop
+> watchers whose buffer is full.
 
 ## Why subscribe BEFORE sending the 200 headers on /watch?
-* Once the client sees headers it may start making changes; subscribing later could miss events in between
-- Headers can't be sent before subscribing
-- To get a lower id
-> Order the steps so that "response started" implies "subscribed".
+* Otherwise events right after the headers could be missed
+- Go can't send headers until a subscription exists
+- So that the watcher gets a lower event id
+> Once the client sees headers it may start making changes; subscribing
+> later could miss events in between. Order the steps so that "response
+> started" implies "subscribed".
 
 ## Why publish while still holding the store's lock?
-* So events are delivered in the same order as the changes they describe
-- Channels require a lock
-- It's faster
+* So events arrive in the same order as the changes
+- Sending on a channel requires holding a lock
+- It's faster than locking a second time
 > If two PUTs published after unlocking, their events could be reordered
 > relative to the changes. Publishing is non-blocking, so holding the lock is
 > cheap.
 
 ## Which is the correct way to tell, inside a streaming loop, that the client has gone?
-* <-r.Context().Done() fires (and/or Write/Flush returns an error)
+* <-r.Context().Done() fires
 - r.Body returns io.EOF
 - w.Header() becomes nil
 > The server cancels the request context on disconnect. Write and Flush

@@ -18,7 +18,7 @@
 > to that type gives it the method. It's the adapter pattern.
 
 ## With mux.HandleFunc("GET /", h) as the only route, what does a GET for /does/not/exist return?
-* Whatever h returns: "/" matches every path
+* Whatever h returns
 - 404 Not Found
 - 301 redirect to /
 > A pattern ending in a slash matches the whole subtree, and "/" is the root of
@@ -26,12 +26,12 @@
 
 ## With only mux.HandleFunc("GET /items", h) registered, what does `DELETE /items` get?
 - 404 Not Found
-* 405 Method Not Allowed, with an Allow header listing GET and HEAD
+* 405 Method Not Allowed
 - h runs anyway
 - 501 Not Implemented
 > When the path matches some pattern but the method matches none, ServeMux
-> answers 405 and lists the allowed methods in the Allow header. GET patterns
-> also match HEAD.
+> answers 405 and lists the allowed methods in the Allow header (here GET and
+> HEAD, since GET patterns also match HEAD).
 
 ## What status does the client receive here?
 ```go
@@ -40,7 +40,7 @@ func h(w http.ResponseWriter, r *http.Request) {
     w.WriteHeader(http.StatusCreated)
 }
 ```
-* 200 OK: the first Write already sent an implicit 200, and the later WriteHeader is ignored
+* 200 OK
 - 201 Created
 - 500 Internal Server Error
 > Write sends the headers with status 200 if WriteHeader wasn't called yet.
@@ -48,24 +48,26 @@ func h(w http.ResponseWriter, r *http.Request) {
 > headers, then WriteHeader, then Write.
 
 ## A handler calls w.Header().Set("X-Trace", "abc") after it has written the body. Does the client see X-Trace?
-- Yes
-* No, the headers were already sent with the first Write
-- Only for HTTP/2
+- Yes: the header map is sent when the handler returns
+* No: the headers went out with the first Write
+- Only over HTTP/2, which buffers headers until the end
 > Headers are sent when the status line is written (WriteHeader or the first
 > Write). Later changes to the header map are ignored (except for declared
 > trailers).
 
 ## Why should NewHandler create its own mux with http.NewServeMux() instead of using http.HandleFunc?
-* http.HandleFunc registers on the global DefaultServeMux; registering the same pattern twice panics, and any imported package can add routes to it
-- http.HandleFunc is deprecated
-- DefaultServeMux doesn't support method patterns
-- NewServeMux is faster
+* http.HandleFunc registers on a global mux shared by every package
+- http.HandleFunc is deprecated in favour of the ServeMux methods
+- DefaultServeMux doesn't support method and wildcard patterns
+- A mux from NewServeMux routes requests faster than DefaultServeMux
+> http.HandleFunc registers on the global DefaultServeMux: registering the
+> same pattern twice panics, and any imported package can add routes to it.
 > Global state makes code hard to test and reason about. A fresh mux per
 > NewHandler call lets tests build many independent servers.
 
 ## Which httptest helper calls a handler directly, with no network involved, and records what it writes?
 - httptest.NewServer
-* httptest.NewRecorder (with httptest.NewRequest)
+* httptest.NewRecorder
 - httptest.NewUnstartedServer
 - http.ListenAndServe
 > rec := httptest.NewRecorder(); h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil)).

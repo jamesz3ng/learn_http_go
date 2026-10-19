@@ -15,9 +15,10 @@
 > response, whatever its status, is success at this layer.
 
 ## Why must a RoundTripper clone the request before setting a header?
-* RoundTrippers must not modify the caller's request; the caller may reuse or inspect it
-- Headers can't be set on an existing request
-- Clone makes the request faster
+* A RoundTripper must not modify the caller's request
+- Headers can't be set on a request once it's built
+- Clone makes the request faster to send
+> The caller may reuse or inspect its request afterwards.
 > req.Clone(ctx) deep-copies the headers (and more), so changes don't leak
 > back to the caller. The body is still shared.
 
@@ -28,47 +29,55 @@
 - 404 Not Found
 - 400 Bad Request
 - context.Canceled
+- A TLS certificate verification error
 > Transient failures may succeed later. 4xx errors mean the request itself is
-> wrong, and a cancelled context means the caller has given up.
+> wrong, a bad certificate won't fix itself, and a cancelled context means
+> the caller has given up.
 
 ## Why shouldn't a generic retry transport retry POST requests?
-* POST isn't idempotent: if the first attempt reached the server, retrying may perform the action twice
-- POST requests can't have bodies replayed
-- Servers reject retried POSTs
-> Only retry non-idempotent requests when the server can deduplicate them,
-> e.g. with an Idempotency-Key header.
+* POST isn't idempotent, so the action may run twice
+- POST bodies can never be replayed on a retry
+- Servers always reject a retried POST
+> If the first attempt reached the server, retrying may perform the action
+> twice. Only retry non-idempotent requests when the server can deduplicate
+> them, e.g. with an Idempotency-Key header.
 
 ## On a retry, where does the request body come from?
 - req.Body again
-* req.GetBody(), which returns a fresh reader with the same content
+* req.GetBody()
 - The response body
 - It isn't sent on retries
-> The first attempt consumed (and closed) req.Body. GetBody is set
+> The first attempt consumed (and closed) req.Body. GetBody returns a fresh
+> reader with the same content. It is set
 > automatically for *bytes.Buffer, *bytes.Reader and *strings.Reader bodies.
 
 ## Why add jitter to exponential backoff?
-* So clients that failed together don't all retry at the same instant (thundering herd)
-- To make tests pass
-- Because timers are inaccurate
-> Randomising the delay spreads retries out, giving an overloaded server a
-> chance to recover.
+* So clients that failed together don't retry in sync
+- To make retry timing deterministic in tests
+- Because timers aren't accurate enough without it
+> Without jitter, clients that failed together all retry at the same instant
+> (a thundering herd). Randomising the delay spreads retries out, giving an
+> overloaded server a chance to recover.
 
 ## Why is `time.Sleep(delay)` a poor way to wait between retries?
-* It ignores context cancellation, so a cancelled request keeps sleeping
-- Sleep is inaccurate
-- It blocks other goroutines
+* It ignores context cancellation
+- Sleep can wake up seconds too early
+- It blocks every other goroutine as well
+> A cancelled request keeps sleeping until the delay is over. Instead,
 > select on a timer and req.Context().Done() so cancellation takes effect
 > immediately.
 
 ## You retry after a 503 without draining and closing its body. What's the cost?
-* The 503's connection can't return to the pool: each retry opens a new connection, and the old one leaks until the body is closed
-- Nothing, the next RoundTrip reuses it
-- The retry gets the old body
-> Always drain and close responses you discard.
+* The 503's connection can't go back to the pool
+- Nothing: the next RoundTrip reuses it anyway
+- The retry reads the old 503 body by mistake
+> Each retry then opens a new connection, and the old one leaks until the
+> body is closed. Always drain and close responses you discard.
 
 ## A logging transport is placed INSIDE a retry transport. With 2 retries, how many log lines does one call produce?
-* 3, one per attempt
+* 3
 - 1
 - 2
-> The retry transport calls the inner transport once per attempt. Placed
+> One line per attempt: the retry transport calls the inner transport once
+> per attempt (1 + 2 retries). Placed
 > outside, the logger would see only the final result.

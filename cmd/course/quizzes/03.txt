@@ -1,28 +1,29 @@
 # Stage 3: Your first request
 
 ## `resp, err := http.Get(url)` and the server answers 500 Internal Server Error. What is err?
-* nil: any HTTP response, whatever its status, is a successful exchange
+* nil, with resp.StatusCode set to 500
 - A non-nil error describing the 500
 - An *url.Error wrapping the status
+> Any HTTP response, whatever its status, is a successful exchange.
 > Client.Do returns an error only when there's no response (or a redirect
 > policy fails). Status codes are data: check resp.StatusCode yourself.
 
 ## Which is the correct idiom?
 ```go
-// A
+// Version 1
 resp, err := client.Do(req)
 defer resp.Body.Close()
 if err != nil { return err }
 
-// B
+// Version 2
 resp, err := client.Do(req)
 if err != nil { return err }
 defer resp.Body.Close()
 ```
-- A
-* B
+- Version 1
+* Version 2
 - Both are fine
-> When err != nil, resp is nil, so A would panic with a nil pointer
+> When err != nil, resp is nil, so version 1 would panic with a nil pointer
 > dereference. Check the error first, then defer the Close.
 
 ## What happens if you read a response body only halfway and then close it?
@@ -35,36 +36,41 @@ defer resp.Body.Close()
 > back, drain the body first (io.Copy(io.Discard, resp.Body)).
 
 ## Why use io.Copy(stdout, resp.Body) instead of io.ReadAll in a curl clone?
-* Output appears as it arrives and memory use doesn't grow with the size of the body
-- io.ReadAll can't read HTTP bodies
-- io.Copy closes the body for you
-- io.ReadAll ignores Content-Length
-> io.Copy moves data in small chunks, so a huge or endless
-> response streams through in constant memory.
+* Output streams out as it arrives, in constant memory
+- io.ReadAll can't read bodies larger than 32 KB
+- io.Copy closes the response body when it's done
+- io.ReadAll ignores Content-Length and reads past it
+> io.Copy moves data in small chunks, so output appears as it arrives and a
+> huge or endless response streams through in constant memory. io.ReadAll
+> buffers the whole body, so its memory use grows with the body's size.
 
 ## What does `url.Parse("localhost:8080/x")` return?
 - An error: missing scheme
-* A URL with Scheme "localhost" (and the rest as an opaque string), and a nil error
-- A URL with Host "localhost:8080"
-> url.Parse is lenient: "localhost:" looks like a scheme. Always validate the
+* A URL with Scheme "localhost" and a nil error
+- A URL with Host "localhost:8080" and a nil error
+> url.Parse is lenient: "localhost:" looks like a scheme, and the rest
+> ("8080/x") becomes an opaque string. Always validate the
 > parsed Scheme and Host, and add "http://" yourself when there's no "://".
 
 ## Which call finds a dial (connection) failure anywhere in a wrapped error chain?
-- err.(*net.OpError)
-* errors.As(err, &opErr) with var opErr *net.OpError, then check opErr.Op == "dial"
-- errors.Is(err, net.OpError{})
+- opErr, ok := err.(*net.OpError); ok && opErr.Op == "dial"
+* errors.As(err, &opErr) && opErr.Op == "dial"
+- errors.Is(err, &net.OpError{Op: "dial"})
 - strings.Contains(err.Error(), "refused")
 > Client errors are wrapped (*url.Error → *net.OpError → syscall error).
-> errors.As walks the chain looking for the target type. A plain type
+> errors.As (with var opErr *net.OpError) walks the chain looking for the
+> target type; then opErr.Op == "dial" tells you it was a connection
+> failure. errors.Is compares values, not types. A plain type
 > assertion only checks the outermost error. String matching is fragile.
 
 ## Why does gocurl's Run take stdin, stdout and stderr as parameters instead of using os.Stdout directly?
-- os.Stdout can't be used in a library
-* So tests can run it in-process with buffers and inspect the output and exit code
-- It's required by the flag package
-- To make it faster
-> Passing the outside world in as parameters makes the program testable
-> without building a binary or spawning processes.
+- Because os.Stdout can't be written from a library package
+* So tests can run it in-process with buffers
+- The flag package requires the streams as parameters
+- Passing streams avoids syscalls, which makes it faster
+> Passing the outside world in as parameters makes the program testable:
+> tests hand it buffers, then inspect the output and exit code, without
+> building a binary or spawning processes.
 
 ## What timeout does http.DefaultClient have?
 - 30 seconds

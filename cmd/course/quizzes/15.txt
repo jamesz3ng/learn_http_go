@@ -16,10 +16,11 @@
 > finishes last.
 
 ## A handler panics and there's no recovery middleware. What does the client get?
-- 500 Internal Server Error
-* The connection is closed with no response; net/http recovers the panic and logs the stack trace
+- 500 Internal Server Error, written by net/http
+* The connection is closed with no response
 - The process crashes and all clients are disconnected
-> net/http recovers handler panics per connection and closes that connection,
+> net/http recovers handler panics per connection, logs the stack trace and
+> closes that connection,
 > so the client sees an empty reply, not a 500. The server keeps running.
 
 ## Your wrapper struct embeds http.ResponseWriter and adds nothing else. What does w.(http.Flusher) return in a handler?
@@ -29,43 +30,51 @@
 > type's extra methods (Flush, Hijack, ReadFrom) are hidden.
 
 ## How does http.ResponseController find Flush through middleware wrappers?
-* It calls the wrapper's Unwrap() http.ResponseWriter method, repeatedly, until it finds a writer that supports the operation
-- It uses reflection on embedded fields
+* It calls each wrapper's Unwrap() method in turn
+- It uses reflection to walk embedded fields
 - It doesn't: wrappers must implement Flush themselves
+> It calls the wrapper's Unwrap() http.ResponseWriter method, repeatedly,
+> until it finds a writer that supports the operation.
 > Give every ResponseWriter wrapper an Unwrap method, and use
 > http.NewResponseController(w).Flush() in handlers.
 
 ## A handler panics AFTER writing part of the body. What should recovery middleware do?
 - Write a 500 status and an error body
-* It's too late for a 500; abort the response (e.g. panic(http.ErrAbortHandler)) so the client sees it fail
-- Ignore it and return normally
-> The status line was already sent. Returning normally would make a truncated
+* Abort the response, e.g. panic(http.ErrAbortHandler)
+- Log it and return normally from the handler
+> It's too late for a 500: the status line was already sent. Aborting makes
+> the client see the response fail. Returning normally would make a truncated
 > response look successful. ErrAbortHandler closes the connection without a
 > stack-trace log.
 
 ## Why use an unexported type (e.g. `type ctxKey int`) as a context key?
-* Keys from different packages can never collide, because no other package can create a value of your type
-- context.WithValue requires a struct type
-- It's faster than a string key
+* No other package can create a key that collides with it
+- context.WithValue requires a struct or int key type
+- Lookups with unexported key types are faster than strings
 > Context keys compare by type and value. A string key like "id" could be
-> used by any package by accident.
+> used by any package by accident, but no other package can create a value
+> of your unexported type, so keys from different packages never collide.
 
 ## Recovery runs OUTSIDE the logging middleware: requestID(recover(log(mux))), with the Reading's logRequests (it logs after next.ServeHTTP returns, without defer). What's logged for a panicking request?
-* No access-log record at all: the panic unwinds through the logger before it can log
+* No access-log record at all
 - A record with status 500
 - A record with status 200
-> Put recovery inside logging so the logger sees the 500 that recovery wrote.
+> The panic unwinds through the logger before it can log; recovery only
+> catches it further out. Put recovery inside logging so the logger sees the
+> 500 that recovery wrote.
 
 ## r.WithContext(ctx) returns...
-* A shallow copy of r with the new context (r itself is unchanged)
-- r, modified in place
-- A deep copy, including the body
-> Request values should be treated as immutable in middleware. WithContext
-> gives a new *Request sharing the same headers, body, etc.
+* A shallow copy of r with the new context
+- r itself, modified in place
+- A deep copy of r, including headers and body
+> r itself is unchanged. Request values should be treated as immutable in
+> middleware. WithContext gives a new *Request sharing the same headers, body,
+> etc.
 
 ## Which slog call is the more efficient form for hot paths?
 * logger.LogAttrs(ctx, slog.LevelInfo, "request", slog.Int("status", 200))
 - logger.Info("request", "status", 200)
+- logger.Log(ctx, slog.LevelInfo, "request", "status", 200)
 - log.Printf("request status=%d", 200)
-> Both slog forms produce the same structured record; LogAttrs with typed
-> slog.Attr values is the efficient form for hot paths.
+> The slog forms all produce the same structured record; LogAttrs, which
+> takes only typed slog.Attr values, is the efficient form for hot paths.

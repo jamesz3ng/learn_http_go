@@ -1,30 +1,35 @@
 # Stage 24: TLS and HTTP/2
 
 ## You create &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}. Which protocol does it use against an HTTP/2 server?
-* HTTP/1.1: a custom TLS config disables automatic HTTP/2 unless ForceAttemptHTTP2 is true
-- HTTP/2, always
-- It fails to connect
-> Set ForceAttemptHTTP2: true, or clone http.DefaultTransport, which has it.
+* HTTP/1.1, unless ForceAttemptHTTP2 is true
+- HTTP/2, since the server supports it
+- It fails to connect: the protocols don't match
+> A custom TLS config disables automatic HTTP/2. Set ForceAttemptHTTP2: true,
+> or clone http.DefaultTransport, which has it.
 
 ## How is HTTP/2 negotiated over TLS?
-* ALPN: during the TLS handshake the client offers "h2" and "http/1.1" and the server picks
+* With ALPN, inside the TLS handshake
 - With an Upgrade: h2 header after connecting
-- By the URL scheme h2://
-> Browsers only speak HTTP/2 over TLS, negotiated with ALPN. (Cleartext
-> "h2c" exists but isn't used by browsers.)
+- By the URL scheme h2:// instead of https://
+> During the TLS handshake the client offers "h2" and "http/1.1" and the
+> server picks. Browsers only speak HTTP/2 over TLS, negotiated with ALPN.
+> (Cleartext "h2c" exists but isn't used by browsers.)
 
 ## What does InsecureSkipVerify: true do?
-* Skips all certificate verification: the connection is encrypted but the server isn't authenticated, so a man-in-the-middle can impersonate it
-- Allows TLS 1.0
-- Encrypts without a certificate
-> It's for testing only. Trust a specific CA with RootCAs instead.
+* Skips all certificate verification
+- Allows old protocol versions such as TLS 1.0
+- Encrypts the connection without any certificate
+> The connection is still encrypted, but the server isn't authenticated, so
+> a man-in-the-middle can impersonate it. It's for testing only. Trust a
+> specific CA with RootCAs instead.
 
 ## A certificate is valid and trusted but lists only "example.com". You connect to https://127.0.0.1. What happens?
-* Verification fails with an x509.HostnameError ("certificate is valid for example.com, not 127.0.0.1")
+* Verification fails with an x509.HostnameError
 - It works because the IP resolves to example.com
 - It works because the certificate is trusted
 > The requested host must match a name or IP in the certificate's Subject
-> Alternative Names.
+> Alternative Names, hence "certificate is valid for example.com, not
+> 127.0.0.1".
 
 ## Which error type (Go 1.20+) wraps all certificate verification failures?
 - x509.UnknownAuthorityError
@@ -41,19 +46,20 @@
 > connection state for HTTPS requests.
 
 ## How do you disable HTTP/2 in a Go client or server?
-* Set TLSNextProto to a non-nil, empty map (or, in Go 1.24+, use the Protocols field)
+* Set TLSNextProto to a non-nil, empty map
 - Set ForceAttemptHTTP2: false on the server
 - Use http.ListenAndServe instead of ListenAndServeTLS
 > A nil TLSNextProto means "configure HTTP/2 automatically"; an empty map
-> means "no extra protocols".
+> means "no extra protocols". In Go 1.24+ the Protocols field can also do it.
 
 ## A plain HTTP request arrives at a Go HTTPS server's port. What does the client get?
-* 400 Bad Request: "Client sent an HTTP request to an HTTPS server."
-- A redirect to https://
-- A TLS alert
-- The connection hangs
+* A plain-text 400 Bad Request
+- A 301 redirect to the https:// URL
+- A TLS alert, then the connection closes
+- Nothing: the connection hangs until a timeout
 > The server spots the plain-text request where it expected a TLS handshake
-> and answers in plain HTTP.
+> and answers in plain HTTP: 400 Bad Request, "Client sent an HTTP request
+> to an HTTPS server."
 
 ## In tests, which helper gives you an HTTPS server and a client that trusts it?
 * httptest.NewTLSServer(h), then srv.Client()
