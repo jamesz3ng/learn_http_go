@@ -109,8 +109,9 @@ logger.LogAttrs(r.Context(), slog.LevelInfo, "request",
 // {"time":"...","level":"INFO","msg":"request","method":"GET","status":200,"duration":153200}
 ```
 
-Structured (key/value) logs can be searched and aggregated. `LogAttrs` with
-typed attributes avoids reflection and allocations. Take the logger as a
+Structured (key/value) logs can be searched and aggregated. `LogAttrs` takes
+typed `slog.Attr` values directly, skipping the conversion of alternating
+`key, value` arguments, so it allocates less on hot paths. Take the logger as a
 dependency (`Config.Logger`), never a global, so tests can capture it, as the
 stage tests do.
 

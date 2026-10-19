@@ -67,5 +67,7 @@
 = RequestURI
 = RequestURI()
 = r.URL.RequestURI()
+= url.URL.RequestURI
+= URL.RequestURI
 > url.URL.RequestURI returns the encoded path?query (or opaque) form, which
 > is exactly what a client puts in its request line.

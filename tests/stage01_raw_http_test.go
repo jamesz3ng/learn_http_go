@@ -87,7 +87,7 @@ func TestStage01_WireFormat(t *testing.T) {
 	}
 	want := "method=GET\ntarget=/raw\nhost=example.test\n"
 	if body != want {
-		t.Fatalf("body = %q, want %q%s", body, want, hint("match header names case-insensitively (strings.EqualFold)"))
+		t.Fatalf("body = %q, want %q%s", body, want, hint("match header names case-insensitively (strings.EqualFold), and trim spaces around the value"))
 	}
 }
 

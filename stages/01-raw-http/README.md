@@ -72,7 +72,9 @@ names are **case-insensitive**, so compare them with `strings.EqualFold`:
 
 ```go
 name, value, ok := strings.Cut(line, ":")   // split at the FIRST colon
-if strings.EqualFold(strings.TrimSpace(name), "Host") { ... }
+if ok && strings.EqualFold(strings.TrimSpace(name), "Host") {
+    host = strings.TrimSpace(value)          // values usually have a space before them
+}
 ```
 
 (Why the first colon? Because values may contain colons: `Host: localhost:8080`.)

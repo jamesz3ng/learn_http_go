@@ -43,8 +43,9 @@ issues on its own. gobin gains httpbin's parameterised endpoints.
 
 ### Escapes inside segments
 
-Matching happens **segment by segment after unescaping**. A `%2F` is an
-escaped slash *inside* a segment, not a separator:
+The mux splits the **escaped** path at `/`, then unescapes each segment
+before matching it, so a `%2F` stays *inside* its segment instead of becoming
+a separator:
 
 ```
 pattern  /kv/{key}
@@ -160,8 +161,9 @@ with `strconv.Itoa(n)`.
 
 1. Register `"/index.html"` alongside your `"GET /{$}"`. Does it panic? Now
    try `"GET /"` with `"/index.html"`. Read the panic message carefully.
-2. **Predict** the status and `Location` for each, then check with `curl -i`:
-   `/get/`, `//get`, `/x/../get`, `/status/%32%30%31`.
+2. **Predict** the status and `Location` for each, then check with
+   `curl -i --path-as-is` (curl normally resolves `..` itself before sending;
+   `--path-as-is` stops it): `/get/`, `//get`, `/x/../get`, `/status/%32%30%31`.
 3. Add a temporary handler `GET /debug/{rest...}` that prints
    `r.PathValue("rest")`. Request `/debug/a%2Fb/c`. Predict the output.
 4. `curl -i localhost:8080/status/204` vs `/status/200`. Does either

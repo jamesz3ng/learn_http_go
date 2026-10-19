@@ -163,7 +163,8 @@ to every request without modifying the caller's request. `nil` base →
 
 | Rule | Detail |
 |---|---|
-| when | a network error from `base`, or status `429`, `502`, `503`, `504` |
+| base | `nil` → `http.DefaultTransport` (as for the bearer transport) |
+| when | **any** error from `base` (unless the request's context is cancelled or past its deadline), or status `429`, `502`, `503`, `504` |
 | which requests | `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`, or any request with an `Idempotency-Key` header. With a body, only if `GetBody` is set |
 | how many | at most `MaxRetries` retries (`MaxRetries + 1` attempts) |
 | body | identical on every attempt |

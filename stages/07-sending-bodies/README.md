@@ -162,7 +162,9 @@ With gobin running (`/anything` echoes everything):
 3. **Predict**, then check: in your code, replace `bytes.NewReader(data)` with
    `struct{ io.Reader }{bytes.NewReader(data)}` (which hides the concrete type).
    What do `headers` in gobin's response show now? Is there a `Content-Length`?
-   Run the stage tests and read the failure. Put it back.
+   (You won't see `Transfer-Encoding` either: Go's server moves it out of
+   `r.Header` into `r.TransferEncoding`.) Run the stage tests and read the
+   failure. Put it back.
 4. `echo '{"from":"stdin"}' | go run ./cmd/gocurl --json @- localhost:8080/anything`
 
 ## Explore further

@@ -35,8 +35,9 @@ the client to trust it explicitly.
 Go ships a generator:
 
 ```sh
-go run "$(go env GOROOT)/src/crypto/tls/generate_cert.go" --host localhost,127.0.0.1 --ca
-# writes cert.pem and key.pem; --ca makes the certificate its own certificate authority
+certs="$(mktemp -d)"    # keep keys out of your repo
+(cd "$certs" && go run "$(go env GOROOT)/src/crypto/tls/generate_cert.go" --host localhost,127.0.0.1 --ca)
+# writes $certs/cert.pem and $certs/key.pem; --ca makes the certificate its own CA
 ```
 
 ([mkcert](https://github.com/FiloSottile/mkcert) is a nicer tool that also
@@ -167,11 +168,11 @@ failure happens after the TCP connection succeeded.
 ## Experiments
 
 1. Generate a cert (see Reading) and run
-   `go run ./cmd/gobin -addr :8443 -cert cert.pem -key key.pem`.
+   `go run ./cmd/gobin -addr :8443 -cert "$certs/cert.pem" -key "$certs/key.pem"`.
 2. `curl -v https://localhost:8443/get`. **Predict** the error. Then `curl -vk`
    and find the ALPN lines (`ALPN: server accepted h2`). Then `--http1.1`.
 3. `curl -i http://localhost:8443/get` (plain HTTP to the TLS port).
-4. `go run ./cmd/gocurl -i --cacert cert.pem https://localhost:8443/get`, then
+4. `go run ./cmd/gocurl -i --cacert "$certs/cert.pem" https://localhost:8443/get`, then
    `https://127.0.0.1:8443/get`. **Predict**: does the second one fail? (Which
    `--host` names did you generate?)
 5. `GODEBUG=http2debug=1 go run ./cmd/gocurl -k https://localhost:8443/get`:

@@ -52,6 +52,8 @@
 = 413
 = 413 Request Entity Too Large
 = 413 Content Too Large
+= http.StatusRequestEntityTooLarge
+= StatusRequestEntityTooLarge
 > 413 (renamed "Content Too Large" in RFC 9110; Go calls it
 > StatusRequestEntityTooLarge).
 

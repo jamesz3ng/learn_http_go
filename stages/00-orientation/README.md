@@ -90,8 +90,9 @@ a body ends. There are three ways:
 2. **`Transfer-Encoding: chunked`**: the body arrives in chunks, each
    prefixed by its size in hex, ending with a zero-size chunk. This is used when
    the sender doesn't know the length up front (e.g. streaming).
-3. **Close the connection** (only for responses, and only in old-style
-   HTTP/1.0 or with `Connection: close`): the body ends at EOF.
+3. **Close the connection** (responses only): with neither header, the body
+   runs until the server closes the connection. This is common in HTTP/1.0;
+   an HTTP/1.1 server doing it must close and should say `Connection: close`.
 
 Getting this right is what lets **keep-alive** work: in HTTP/1.1 a connection
 stays open after a response, and the next request reuses it, saving a TCP

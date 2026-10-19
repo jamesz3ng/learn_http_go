@@ -32,7 +32,8 @@ ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SI
 defer stop()
 ```
 
-(On Windows only `os.Interrupt` is delivered.)
+(On Windows, Ctrl-C/Ctrl-Break arrive as `os.Interrupt`, and closing the
+console, logoff or shutdown arrive as `syscall.SIGTERM`.)
 
 ### `Shutdown` vs `Close`
 
@@ -101,8 +102,26 @@ You need to *tell* streaming handlers to stop. Two tools:
   streams but also aborts the short requests you wanted to finish gracefully.
   It suits some servers, but not our requirements.
 
-Since the channel lives in the `app` that `NewServer` creates, `NewServer`
-is the natural place to wire it up.
+That raises a design question: `NewServer` (stage 17) calls `NewHandler(cfg)`,
+which hides everything inside it, so how can the server reach the handlers'
+shutdown channel? Refactor so both can share one `app`:
+
+```go
+func newApp(cfg Config) *app { ... }            // store, logger, shutdown channel
+func (a *app) handler() http.Handler { ... }    // mux + middleware
+
+func NewHandler(cfg Config) http.Handler { return newApp(cfg).handler() }
+
+func NewServer(cfg Config) *http.Server {
+    a := newApp(cfg)
+    srv := &http.Server{Handler: a.handler(), /* timeouts... */}
+    srv.RegisterOnShutdown(func() { close(a.shutdown) }) // guard with sync.Once
+    return srv
+}
+```
+
+(If you already built your server around an `app` struct, as stage 9
+suggested, this is a small change.)
 
 ### Updating `main`
 
@@ -155,7 +174,7 @@ go run ./cmd/course test 23
 <details>
 <summary>Hint 2: where does the shutdown channel live?</summary>
 
-Make it a field of your `app` struct (created in `newApp`). In `NewServer`,
+Make it a field of your `app` struct, created in `newApp` (see the refactor in the Reading). In `NewServer`,
 `srv.RegisterOnShutdown(func() { once.Do(func() { close(a.shutdown) }) })`,
 and in `watch`'s `select`, `case <-a.shutdown: return`. When the handler
 comes from `NewHandler` (no server), nothing ever closes the channel, which is fine.

@@ -50,11 +50,14 @@ When the Transport writes a request, it fills in some headers that you never see
 |---|---|---|
 | `Host` | always | from the URL, **or `req.Host` if set**. `req.Header["Host"]` is ignored |
 | `User-Agent` | if `req.Header` has no `User-Agent` | sends `Go-http-client/1.1`. Set your own, or set it to `""` to send none |
-| `Accept-Encoding: gzip` | if you didn't set `Accept-Encoding` (or `Range`) | Go then **transparently decompresses** the body and removes `Content-Length`/`Content-Encoding` from the response. Set the header yourself and you get the raw compressed bytes |
+| `Accept-Encoding: gzip` | if you didn't set `Accept-Encoding` (or `Range`) and the method isn't `HEAD` | Go then **transparently decompresses** the body and removes `Content-Length`/`Content-Encoding` from the response. Set the header yourself and you get the raw compressed bytes |
 | `Content-Length` / `Transfer-Encoding` | for bodies | stage 7 |
 
-The `User-Agent` rule is in the doc comment of `Request.Write`: an empty
-value is **present** but empty, and that's what suppresses the default.
+The `User-Agent` rule isn't in the package docs. It's a comment in the
+unexported `(*Request).write` in `$(go env GOROOT)/src/net/http/request.go`
+("Use the defaultUserAgent unless the Header contains one, which may be
+blank"). An empty value is **present** but empty, and that's what suppresses
+the default.
 
 ### Reading the response's status and headers
 
@@ -195,7 +198,7 @@ aren't in `req.Header`, and how to override each one.
 
 ## Reference
 
-- [`http.NewRequestWithContext`](https://pkg.go.dev/net/http#NewRequestWithContext), [`http.Request.Write`](https://pkg.go.dev/net/http#Request.Write) (User-Agent rule), [`Transport.DisableCompression`](https://pkg.go.dev/net/http#Transport)
+- [`http.NewRequestWithContext`](https://pkg.go.dev/net/http#NewRequestWithContext), [`Transport.DisableCompression`](https://pkg.go.dev/net/http#Transport)
 - [`flag.Value`](https://pkg.go.dev/flag#Value)
 - [curl man page](https://curl.se/docs/manpage.html): `-X`, `-H`, `-A`, `-i`, `-I`
 

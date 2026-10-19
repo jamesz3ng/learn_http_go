@@ -167,7 +167,7 @@ Implement [`kvclient/kvclient.go`](../../kvclient/kvclient.go) (stage 10 section
 | `Get(ctx, key)` | the value bytes |
 | `Delete(ctx, key)` | |
 | `List(ctx, prefix)` | `GET {base}/kv?prefix=...`; decode `{"keys": [...]}` |
-| errors | any non-2xx → `*APIError{StatusCode, Message}`; `Message` from the JSON `error` field, or else the trimmed body text. A 404 also matches `errors.Is(err, ErrNotFound)` |
+| errors | any non-2xx → `*APIError{StatusCode, Message}`; `Message` from the JSON `error` field if the body parses as JSON (whatever the `Content-Type` says: `http.Error` labels JSON bodies `text/plain`), or else the trimmed body text. A 404 also matches `errors.Is(err, ErrNotFound)` |
 | headers | `User-Agent: kvclient/1.0` |
 | context | every request uses `ctx` (cancellation and deadlines work) |
 | connections | sequential calls reuse one connection, error paths included |
@@ -211,7 +211,7 @@ you don't need the content.
 
 1. With gobin running, `go run ./cmd/kv put 'a/b c' x` then
    `curl 'localhost:8080/kv?prefix=a'`. Was the key stored intact?
-2. In `keyURL`, swap `url.PathEscape` for `url.QueryEscape`. **Predict** what
+2. Where you escape the key for the URL, swap `url.PathEscape` for `url.QueryEscape`. **Predict** what
    happens to the key `a b`, then run the tests.
 3. Write a small program that calls `Get` with a context that's
    already cancelled. What error do you get? Is it `errors.Is(err, context.Canceled)`?

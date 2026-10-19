@@ -4,6 +4,8 @@
 = ServeHTTP
 = ServeHTTP(w, r)
 = ServeHTTP(ResponseWriter, *Request)
+= ServeHTTP(http.ResponseWriter, *http.Request)
+= ServeHTTP(w http.ResponseWriter, r *http.Request)
 > type Handler interface { ServeHTTP(ResponseWriter, *Request) }
 
 ## Why does `http.HandlerFunc(myFunc)` satisfy http.Handler?

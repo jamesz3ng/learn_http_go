@@ -139,9 +139,10 @@ go run ./cmd/proxy -listen :8080 -backend http://localhost:9001 -backend http://
 1. Parse and validate the backends.
 2. Get one backend working with `httputil.ReverseProxy` + `Rewrite` (`SetURL`,
    `SetXForwarded`).
-3. Move backend choice into a `RoundTripper` that sets `out.URL.Scheme`,
-   `out.URL.Host`, the joined path, and `out.Host = ""`, then calls
-   `http.DefaultTransport.RoundTrip`.
+3. Move backend choice into a `RoundTripper` that **clones** the request
+   (stage 16's rule), sets the clone's `URL.Scheme`, `URL.Host`, the joined
+   path and `Host = ""`, then calls `cfg.Transport` (default
+   `http.DefaultTransport`).
 4. Add round robin, then failover, then the cooldown.
 </details>
 

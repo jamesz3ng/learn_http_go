@@ -172,8 +172,10 @@ With `go run ./cmd/gobin -static .` (stage 21):
    **Predict** the size of `/tmp/y`, then check it with `wc -c`.
 4. `go run ./cmd/gocurl -F file=@go.mod -F note=hi localhost:8080/upload` (gobin
    from stage 21) and compare the sha256 with `sha256sum go.mod`.
-5. Upload with `-F` to `localhost:8080/anything` with `-i`. Is there a
-   `Content-Length` in the request headers gobin echoes? Why not?
+5. If you streamed `-F` through `io.Pipe`, upload to `localhost:8080/anything`
+   and look at the request `headers` gobin echoes: is there a `Content-Length`?
+   Why not? (`Transfer-Encoding` won't show either: Go's server moves it into
+   `r.TransferEncoding`.) If you built the form in a `bytes.Buffer`, what changes?
 
 ## Explore further
 

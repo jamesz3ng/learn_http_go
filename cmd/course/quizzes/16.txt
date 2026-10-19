@@ -3,6 +3,8 @@
 ## Which single method does http.RoundTripper require?
 = RoundTrip
 = RoundTrip(*Request) (*Response, error)
+= RoundTrip(*http.Request) (*http.Response, error)
+= RoundTrip(req)
 > RoundTrip(*http.Request) (*http.Response, error): one HTTP exchange.
 
 ## A RoundTripper receives a 500 response from the server. What should it return?

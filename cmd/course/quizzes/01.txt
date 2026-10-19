@@ -61,6 +61,8 @@
 ## In net/http's source (server.go), which method contains the accept loop that starts `go c.serve(...)`?
 = Server.Serve
 = (*Server).Serve
+= http.Server.Serve
+= srv.Serve
 = Serve
 > func (srv *Server) Serve(l net.Listener) error loops over l.Accept() and
 > starts a goroutine per connection, just like your rawhttp.Serve.

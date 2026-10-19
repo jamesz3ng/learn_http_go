@@ -13,7 +13,7 @@
 - req.UserAgent = ""
 - It's impossible
 > Deleting the key means "use the default". A present-but-empty value means
-> "send nothing" (documented on Request.Write).
+> "send nothing" (see the comment in (*Request).write in net/http/request.go).
 
 ## You set req.Header.Set("Host", "example.test"). What Host does the server see?
 * The host from the URL: Go ignores Header["Host"] when sending; set req.Host instead
@@ -38,9 +38,9 @@ req.Header.Set("X-Tag", "a")
 ```
 - req.Header.Set("X-Tag", "b")
 * req.Header.Add("X-Tag", "b")
-- req.Header["x-tag"] = []string{"b"}
-> Set replaces all values; Add appends. Direct map assignment with a
-> non-canonical key creates a separate entry with a non-canonical name.
+- req.Header.Set("x-tag", "b")
+> Set replaces all values, even when you spell the name in lower case
+> (Set canonicalises it to X-Tag); Add appends.
 
 ## Why sort header names before printing them?
 - HTTP requires headers in alphabetical order

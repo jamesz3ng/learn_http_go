@@ -134,11 +134,12 @@ func firstLine(s string) string {
 	return l
 }
 
-// normalize makes typed answers comparable: case, spaces, backticks and a
-// trailing "()" don't matter.
+// normalize makes typed answers comparable: case, spaces, backticks,
+// surrounding quotes and a trailing "()" don't matter.
 func normalize(s string) string {
 	s = strings.ToLower(strings.TrimSpace(s))
 	s = strings.ReplaceAll(s, "`", "")
+	s = strings.Trim(s, `"'`)
 	s = strings.TrimSuffix(s, "()")
 	return strings.Join(strings.Fields(s), " ")
 }

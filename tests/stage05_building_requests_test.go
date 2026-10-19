@@ -64,7 +64,7 @@ func TestStage05_RemoveHeaderWithEmptyValue(t *testing.T) {
 	curl(t, "-H", "User-Agent:", srv.URL).wantCode(t, 0, "gocurl -H 'User-Agent:'")
 	if vals, ok := srv.last(t).Header["User-Agent"]; ok {
 		t.Fatalf("-H 'User-Agent:' should send no User-Agent at all, server saw %q%s", vals,
-			hint("if req.Header has no User-Agent, Go adds its own default; set it to the empty string to send none (see the Request.Write docs)"))
+			hint("if req.Header has no User-Agent, Go adds its own default; set it to the empty string to send none (see the comment in (*Request).write in net/http/request.go)"))
 	}
 }
 

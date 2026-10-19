@@ -14,10 +14,12 @@
 
 ## Which conditions must hold for an HTTP/1.1 connection to go back into the pool?
 * The response body was read to EOF
-* The body was closed
 * Neither side asked to close the connection (keep-alive)
+- The body was closed without reading it to EOF
 - The request used GET
-> Partially read bodies and Connection: close responses lose the connection.
+> Reaching EOF is what hands the connection back to the pool. Closing a body
+> that wasn't fully read discards the connection, as does Connection: close.
+> (Always Close anyway: it's how you release a body you don't read.)
 
 ## How do you find out whether one specific request reused a pooled connection?
 * An httptrace.ClientTrace with a GotConn hook, attached via httptrace.WithClientTrace(ctx, trace); check GotConnInfo.Reused

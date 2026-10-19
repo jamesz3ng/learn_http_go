@@ -116,8 +116,10 @@ redirect test.
 <summary>Hint 2: -b</summary>
 
 The simplest approach is `req.Header.Set("Cookie", value)`. For a cleaner
-alternative, parse the string with `http.ParseCookie` (Go 1.23) and add them
-to the jar for the request URL with `jar.SetCookies`.
+alternative, parse the string with `http.ParseCookie` (Go 1.23), set
+`Path: "/"` on each (otherwise the jar gives them the request's directory as
+their path, and they vanish after a redirect elsewhere on the site), and add
+them to the jar for the request URL with `jar.SetCookies`.
 </details>
 
 ## Experiments

@@ -7,3 +7,6 @@
 /bin/
 *.test
 *.out
+
+# TLS keys and certificates from stage 24 experiments
+*.pem

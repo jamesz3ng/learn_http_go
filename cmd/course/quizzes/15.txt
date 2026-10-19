@@ -50,7 +50,7 @@
 > Context keys compare by type and value. A string key like "id" could be
 > used by any package by accident.
 
-## Recovery runs OUTSIDE the logging middleware: requestID(recover(log(mux))). What's logged for a panicking request?
+## Recovery runs OUTSIDE the logging middleware: requestID(recover(log(mux))), with the Reading's logRequests (it logs after next.ServeHTTP returns, without defer). What's logged for a panicking request?
 * No access-log record at all: the panic unwinds through the logger before it can log
 - A record with status 500
 - A record with status 200
@@ -63,7 +63,7 @@
 > Request values should be treated as immutable in middleware. WithContext
 > gives a new *Request sharing the same headers, body, etc.
 
-## Which slog call logs with typed attributes and no reflection?
+## Which slog call is the more efficient form for hot paths?
 * logger.LogAttrs(ctx, slog.LevelInfo, "request", slog.Int("status", 200))
 - logger.Info("request", "status", 200)
 - log.Printf("request status=%d", 200)

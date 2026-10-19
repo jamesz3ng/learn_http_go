@@ -163,7 +163,8 @@ for {
 ## Your task
 
 **`GET /stream/{n}`** (`1 ≤ n ≤ 100`): `n` lines of JSON, `{"id": 0, ...}` to
-`{"id": n-1, ...}`, `Content-Type: application/x-ndjson`, each line
+`{"id": n-1, ...}` (add any other fields you like; only `id` is checked),
+`Content-Type: application/x-ndjson`, each line
 **flushed** as it's written. Optional `?interval=` (a Go duration, 0–5s) waits
 between lines. Invalid input → `400`. Stop early if the client leaves.
 

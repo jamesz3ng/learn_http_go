@@ -120,6 +120,16 @@ To decode into a struct, use `json.NewDecoder(r.Body).Decode(&dst)`.
 For APIs you'll often want `dec.DisallowUnknownFields()` too, so typos in
 field names are rejected instead of silently ignored.
 
+### Error responses
+
+From now on, errors are JSON too. Add a helper next to `writeJSON` from stage 4:
+
+```go
+func writeError(w http.ResponseWriter, status int, msg string) {
+    writeJSON(w, status, map[string]string{"error": msg})
+}
+```
+
 ### Routes for every method, or one
 
 ```go

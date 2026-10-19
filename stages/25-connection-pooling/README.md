@@ -124,7 +124,7 @@ Implement [`loadgen.Run`](../../loadgen/loadgen.go):
 | latencies | `P50`, `P90`, `P99`, `Max` over requests that got a response, measured until the body was fully read |
 | `Elapsed` | wall-clock time of the run |
 | timeout | `cfg.Timeout` per request (default 10s) |
-| errors | invalid URL → error. Cancelled `ctx` → stop promptly, return the partial report **and** `ctx.Err()` |
+| errors | `cfg.URL` that isn't an absolute `http`/`https` URL with a host → error, before sending anything (as in stage 10: `url.Parse("not a url")` succeeds!). Cancelled `ctx` → stop promptly, return the partial report **and** `ctx.Err()` |
 
 Then try it: `go run ./cmd/loadgen -n 2000 -c 50 http://localhost:8080/get`.
 

@@ -97,7 +97,9 @@ messages and exit codes. (By convention a program killed by Ctrl-C, SIGINT, exit
 - `-m`/`--max-time SECONDS` (fractions allowed): the whole operation.
   Timeout → exit **28** ("Operation timed out").
 - `--connect-timeout SECONDS`: only the connection phase.
-- Neither by default: curl, like Go, waits forever unless told otherwise.
+- No overall limit by default: neither curl nor Go's client limits the whole
+  transfer (though `DefaultTransport` caps dialing at 30s and the TLS
+  handshake at 10s).
 
 > **📖 Source dive:** in `$(go env GOROOT)/src/net/http/client.go`, read
 > `func setRequestCancel` and how `Client.Timeout` is turned into a
@@ -150,17 +152,20 @@ Clone `http.DefaultTransport`, set `DialContext` to a `net.Dialer` with
 
 With gobin running:
 
-1. `go run ./cmd/gocurl -m 1 localhost:8080/delay/3; echo $?`, then
-   `go run ./cmd/gocurl -m 1 localhost:8080/stream/5?interval=400ms`. Which
-   lines arrive before the timeout?
+1. `go run ./cmd/gocurl -m 1 localhost:8080/delay/3; echo $?`. (Come back
+   after stage 19 and try `go run ./cmd/gocurl -m 1 'localhost:8080/stream/5?interval=400ms'`:
+   which lines arrive before the timeout?)
 2. Run `go run ./cmd/gocurl localhost:8080/delay/10` and press Ctrl-C after a
    second. What does gobin's access log say (stage 17)?
 3. `--connect-timeout 2` against an unroutable address such as
    `http://10.255.255.1/` (on most networks packets there vanish). **Predict**
    the error message. What happens without `--connect-timeout`, and why does it
    still eventually fail? (Look at `DefaultTransport`'s dialer.)
-4. Write a program using `http.Client{Timeout: time.Second}` to GET
-   `/stream/10?interval=300ms`. `Do` succeeds. Where does it fail?
+4. Write a program using `http.Client{Timeout: time.Second}` to GET a
+   response that arrives slowly: an `httptest.NewServer` whose handler writes
+   a line, flushes (`http.NewResponseController(w).Flush()`) and sleeps 300ms,
+   ten times (or gobin's `/stream/10?interval=300ms` after stage 19). `Do`
+   succeeds. Where does it fail?
 
 ## Explore further
 

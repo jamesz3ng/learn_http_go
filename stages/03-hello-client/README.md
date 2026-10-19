@@ -37,7 +37,7 @@ resp.Body          // io.ReadCloser: the body, streamed from the network
 ```
 
 `http.Get` is shorthand for `http.DefaultClient.Get`, which builds a
-`GET` request and calls `Do`. `Run` receives a `context.Context`, so prefer
+`GET` request and calls `Do`. gocurl's `Run` (introduced below) receives a `context.Context`, so prefer
 the spelled-out version, which lets the caller cancel the request:
 
 ```go

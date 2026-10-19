@@ -49,7 +49,7 @@ json.NewEncoder(w).Encode(v)                       // 3. body
 
 | Need | Code | Stage |
 |---|---|---|
-| error text | `http.Error(w, "msg", code)` | 3 |
+| plain-text error | `http.Error(w, "msg", code)` (sets `text/plain`) | 6 |
 | redirect | `http.Redirect(w, r, url, http.StatusSeeOther)` | 11 |
 | cookie | `http.SetCookie(w, &http.Cookie{...})`, delete with `MaxAge: -1` | 13 |
 | content with Range/ETag/304 | set `ETag`, then `http.ServeContent(w, r, name, mod, readSeeker)` | 21 |
@@ -117,7 +117,7 @@ tr := http.DefaultTransport.(*http.Transport).Clone()                     // kee
 tr.DialContext = (&net.Dialer{Timeout: 3 * time.Second}).DialContext      // connect timeout [18]
 tr.MaxIdleConnsPerHost = 64                                               // default 2! [25]
 tr.TLSClientConfig = &tls.Config{RootCAs: pool}                           // custom CA [24]
-tr.ForceAttemptHTTP2 = true                                               // needed with custom TLS [24]
+tr.ForceAttemptHTTP2 = true                                               // already true after Clone; needed on a hand-built Transport [24]
 jar, _ := cookiejar.New(nil)                                              // [14]
 client := &http.Client{
     Transport: tr,
