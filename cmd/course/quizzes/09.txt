@@ -1,0 +1,73 @@
+# Stage 9: A concurrent REST resource
+
+## How do Go HTTP handlers run?
+- One at a time, in the order requests arrive
+* Concurrently: each connection (and each HTTP/2 stream) is served in its own goroutine
+- In a fixed-size pool of worker goroutines
+> Any number of handler calls can run at the same time, so shared state must
+> be synchronised.
+
+## Two handlers write to the same plain map at the same time. What can happen?
+* The runtime may stop the whole process with "fatal error: concurrent map writes"
+* Data may be silently corrupted
+- Nothing: Go maps are safe for concurrent use
+- A panic that recover() can catch
+> Map races are undefined behaviour. The runtime catches some of them and
+> aborts the program, and that fatal error can't be recovered.
+
+## Which status code fits "PUT stored a NEW resource"?
+= 201
+= 201 Created
+> 201 Created, with a Location header pointing at the new resource.
+
+## A PUT replaces an existing value and returns nothing. Which status code fits best?
+- 200 OK with an empty body
+* 204 No Content
+- 201 Created
+- 304 Not Modified
+> 204 says "success, and there is deliberately no body". 200 with an empty
+> body works but says less; 304 is for conditional GETs.
+
+## What does Write return after w.WriteHeader(http.StatusNoContent)?
+* http.ErrBodyNotAllowed: 204 responses can't have a body
+- nil, and the body is sent
+- nil, and the body is silently discarded
+> Go enforces that 1xx, 204 and 304 responses have no body.
+
+## Why is PUT a better fit than POST for "store value under the key the client chose"?
+* PUT is idempotent and targets the URL the client names; POST lets the server pick the URL and isn't idempotent
+- POST can't carry a body
+- PUT is faster
+> Idempotency means a client (or proxy) can safely retry a PUT that timed out.
+> Retrying a POST might create something twice.
+
+## What's wrong with this handler?
+```go
+func (a *app) put(w http.ResponseWriter, r *http.Request) {
+    a.mu.Lock()
+    defer a.mu.Unlock()
+    b, _ := io.ReadAll(r.Body)
+    a.data[r.PathValue("key")] = b
+}
+```
+- Nothing
+* It holds the lock while reading the body, so one slow client blocks every other request
+- RWMutex is required for maps
+- PathValue is not safe to call under a lock
+> Do I/O first, then lock only for the map update. (It also ignores the read
+> error and doesn't limit the body size.)
+
+## Which command runs the stage 9 tests with Go's race detector?
+* go test -race -run TestStage09_ ./tests/
+- go vet -race ./tests/
+- go test -run TestStage09_ -cpu 8 ./tests/
+- GORACE=1 go test ./tests/
+> -race instruments the build. It only reports races that actually occur
+> during the run, so concurrent tests matter.
+
+## You return the stored []byte from GET without copying it. When is that safe?
+* When nothing ever modifies a stored slice after it's put in the map (PUT always stores a fresh slice)
+- Never
+- Only with an RWMutex
+> Sharing immutable data is safe. The danger is a later write into the same
+> backing array while another goroutine reads it.

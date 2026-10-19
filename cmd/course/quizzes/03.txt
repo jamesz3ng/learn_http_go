@@ -1,0 +1,82 @@
+# Stage 3: Your first request
+
+## `resp, err := http.Get(url)` and the server answers 500 Internal Server Error. What is err?
+* nil: any HTTP response, whatever its status, is a successful exchange
+- A non-nil error describing the 500
+- An *url.Error wrapping the status
+> Client.Do returns an error only when there's no response (or a redirect
+> policy fails). Status codes are data: check resp.StatusCode yourself.
+
+## Which is the correct idiom?
+```go
+// A
+resp, err := client.Do(req)
+defer resp.Body.Close()
+if err != nil { return err }
+
+// B
+resp, err := client.Do(req)
+if err != nil { return err }
+defer resp.Body.Close()
+```
+- A
+* B
+- Both are fine
+> When err != nil, resp is nil, so A would panic with a nil pointer
+> dereference. Check the error first, then defer the Close.
+
+## What happens if you read a response body only halfway and then close it?
+- The rest of the body is read automatically so the connection can be reused
+* The connection is closed instead of returned to the pool, so the next request needs a new connection
+- The body stays buffered in memory until the next request
+- Nothing: Close is a no-op for HTTP bodies
+> A connection can only be reused if the body was fully consumed. Closing early
+> makes the Transport discard the connection. If you need the connection
+> back, drain the body first (io.Copy(io.Discard, resp.Body)).
+
+## Why use io.Copy(stdout, resp.Body) instead of io.ReadAll in a curl clone?
+* Output appears as it arrives and memory use doesn't grow with the size of the body
+- io.ReadAll can't read HTTP bodies
+- io.Copy closes the body for you
+- io.ReadAll ignores Content-Length
+> io.Copy moves data in small chunks, so a huge or endless
+> response streams through in constant memory.
+
+## What does `url.Parse("localhost:8080/x")` return?
+- An error: missing scheme
+* A URL with Scheme "localhost" (and the rest as an opaque string), and a nil error
+- A URL with Host "localhost:8080"
+> url.Parse is lenient: "localhost:" looks like a scheme. Always validate the
+> parsed Scheme and Host, and add "http://" yourself when there's no "://".
+
+## Which call finds a dial (connection) failure anywhere in a wrapped error chain?
+- err.(*net.OpError)
+* errors.As(err, &opErr) with var opErr *net.OpError, then check opErr.Op == "dial"
+- errors.Is(err, net.OpError{})
+- strings.Contains(err.Error(), "refused")
+> Client errors are wrapped (*url.Error → *net.OpError → syscall error).
+> errors.As walks the chain looking for the target type. A plain type
+> assertion only checks the outermost error. String matching is fragile.
+
+## Why does gocurl's Run take stdin, stdout and stderr as parameters instead of using os.Stdout directly?
+- os.Stdout can't be used in a library
+* So tests can run it in-process with buffers and inspect the output and exit code
+- It's required by the flag package
+- To make it faster
+> Passing the outside world in as parameters makes the program testable
+> without building a binary or spawning processes.
+
+## What timeout does http.DefaultClient have?
+- 30 seconds
+- 90 seconds
+* None: a request can hang forever
+- It depends on the server
+> http.DefaultClient (used by http.Get) has Timeout 0, which means no limit.
+> Fine for a quick script, a liability in a server. Stage 18 covers timeouts.
+
+## Go's flag package: does `--fail` work for a flag registered as "fail"?
+* Yes: -fail and --fail are equivalent
+- No, only -fail works
+- Only if the flag is a bool
+> The flag package treats one and two leading dashes the same. Register both
+> "f" and "fail" on the same variable for curl-style short and long options.

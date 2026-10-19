@@ -1,0 +1,80 @@
+# Stage 2: Handlers and ServeMux
+
+## Which single method does the http.Handler interface require?
+= ServeHTTP
+= ServeHTTP(w, r)
+= ServeHTTP(ResponseWriter, *Request)
+> type Handler interface { ServeHTTP(ResponseWriter, *Request) }
+
+## Why does `http.HandlerFunc(myFunc)` satisfy http.Handler?
+- The compiler special-cases functions named like handlers
+* HandlerFunc is a function type with a ServeHTTP method that calls the function itself
+- It wraps the function in a ServeMux
+- Because all functions implement interfaces with one method
+> type HandlerFunc func(ResponseWriter, *Request) has the method
+> func (f HandlerFunc) ServeHTTP(w, r) { f(w, r) }. Converting your function
+> to that type gives it the method. It's the adapter pattern.
+
+## With mux.HandleFunc("GET /", h) as the only route, what does a GET for /does/not/exist return?
+* Whatever h returns: "/" matches every path
+- 404 Not Found
+- 301 redirect to /
+> A pattern ending in a slash matches the whole subtree, and "/" is the root of
+> everything. Use "GET /{$}" to match only the root path.
+
+## With only mux.HandleFunc("GET /items", h) registered, what does `DELETE /items` get?
+- 404 Not Found
+* 405 Method Not Allowed, with an Allow header listing GET and HEAD
+- h runs anyway
+- 501 Not Implemented
+> When the path matches some pattern but the method matches none, ServeMux
+> answers 405 and lists the allowed methods in the Allow header. GET patterns
+> also match HEAD.
+
+## What status does the client receive here?
+```go
+func h(w http.ResponseWriter, r *http.Request) {
+    w.Write([]byte("created!"))
+    w.WriteHeader(http.StatusCreated)
+}
+```
+* 200 OK: the first Write already sent an implicit 200, and the later WriteHeader is ignored
+- 201 Created
+- 500 Internal Server Error
+> Write sends the headers with status 200 if WriteHeader wasn't called yet.
+> The later WriteHeader is "superfluous": logged and ignored. Always set
+> headers, then WriteHeader, then Write.
+
+## A handler calls w.Header().Set("X-Trace", "abc") after it has written the body. Does the client see X-Trace?
+- Yes
+* No, the headers were already sent with the first Write
+- Only for HTTP/2
+> Headers are sent when the status line is written (WriteHeader or the first
+> Write). Later changes to the header map are ignored (except for declared
+> trailers).
+
+## Why should NewHandler create its own mux with http.NewServeMux() instead of using http.HandleFunc?
+* http.HandleFunc registers on the global DefaultServeMux; registering the same pattern twice panics, and any imported package can add routes to it
+- http.HandleFunc is deprecated
+- DefaultServeMux doesn't support method patterns
+- NewServeMux is faster
+> Global state makes code hard to test and reason about. A fresh mux per
+> NewHandler call lets tests build many independent servers.
+
+## Which httptest helper calls a handler directly, with no network involved, and records what it writes?
+- httptest.NewServer
+* httptest.NewRecorder (with httptest.NewRequest)
+- httptest.NewUnstartedServer
+- http.ListenAndServe
+> rec := httptest.NewRecorder(); h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil)).
+> Then inspect rec.Code, rec.Header() and rec.Body. httptest.NewServer
+> starts a real server on a random localhost port instead.
+
+## You don't set Content-Type and write "<html><body>hi</body></html>". What Content-Type does Go send?
+- None
+- text/plain; charset=utf-8
+* text/html; charset=utf-8
+- application/octet-stream
+> If Content-Type is unset, the first Write sniffs up to 512 bytes with
+> http.DetectContentType. HTML is detected. JSON isn't (it comes out as
+> text/plain), so always set Content-Type for JSON.

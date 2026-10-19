@@ -1,0 +1,65 @@
+# Stage 12: Following redirects
+
+## How many redirects does an http.Client with a nil CheckRedirect follow before giving up?
+= 10
+> The default policy stops after 10 redirects with "stopped after 10
+> redirects". curl's default --max-redirs is 50.
+
+## What does returning http.ErrUseLastResponse from CheckRedirect do?
+* Do returns the redirect (3xx) response with a nil error and its body still open
+- Do returns an error wrapping ErrUseLastResponse
+- The client follows the redirect but returns the first response
+> It's a sentinel the client recognises: "stop here, and treat the 3xx as the
+> final response".
+
+## CheckRedirect returns your own errTooMany. What does client.Do return?
+* The last redirect response (body already closed) and a *url.Error wrapping errTooMany
+- nil and errTooMany unwrapped
+- The final response and nil
+> The error is wrapped in *url.Error, so use errors.Is(err, errTooMany). The
+> response is returned too, with its body closed.
+
+## Inside CheckRedirect(req, via), what is req.Response?
+* The redirect response that caused req to be created
+- The response that req will receive
+- Always nil
+- The first response in the chain
+> Request.Response is only set on requests created by the client while
+> following redirects, so you can inspect or print each hop.
+
+## You POST with a body and get "302 Found". What does Go's client send next?
+- POST with the same body
+* GET without a body
+- Nothing: Go doesn't follow redirects for POST
+> For 301/302/303, methods other than GET and HEAD become GET and the body is
+> dropped.
+
+## You POST a body built from a plain io.Reader (no GetBody) and get "307". What happens?
+- Go buffers the body and re-sends it
+* Go doesn't follow: it returns the 307 response as the result
+- Go sends a POST with an empty body
+- Do returns an error
+> A 307/308 requires re-sending the body, which needs req.GetBody. Without
+> it, the client returns the 307 instead of following.
+
+## You set Authorization and get redirected from api.example.com to cdn.other.com. Is Authorization sent there?
+- Yes, all headers are copied
+* No: sensitive headers (Authorization, WWW-Authenticate, Cookie) are dropped when redirecting to a different domain
+- Only for 307/308
+> Go copies headers to redirects except sensitive ones going to a domain that
+> isn't the original or one of its subdomains, so a malicious redirect can't
+> harvest your credentials.
+
+## After following redirects, how do you find the final URL?
+- resp.Header.Get("Location")
+* resp.Request.URL
+- req.URL of the original request
+> resp.Request is the request that produced this (final) response, so its URL
+> is where the chain ended.
+
+## With CheckRedirect `if len(via) > 2 { return errStop }`, how many redirects are followed?
+* 2
+- 3
+- 1
+> On the first redirect len(via) is 1, on the second 2 (both allowed), and on
+> the third 3 > 2 stops. So a "max redirects N" check is len(via) > N.

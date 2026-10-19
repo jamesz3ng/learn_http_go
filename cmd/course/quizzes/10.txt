@@ -1,0 +1,65 @@
+# Stage 10: An API client SDK
+
+## What is url.PathEscape("a/b c")?
+= a%2Fb%20c
+> PathEscape encodes a single path segment: "/" becomes %2F and space
+> becomes %20, so the key stays one segment.
+
+## Your SDK builds the URL with base + "/kv/" + key. Which keys break it?
+* "a/b": becomes two path segments
+* "x?y": "?" starts a query string
+* "100%": "%" starts an escape sequence
+- "hello": fine
+> Always escape data before putting it into a URL, with url.PathEscape for
+> path segments and url.Values.Encode for queries.
+
+## How can a single *APIError value satisfy errors.Is(err, ErrNotFound)?
+- It can't; you must return ErrNotFound itself
+* Give *APIError an `Is(target error) bool` method returning true for ErrNotFound when StatusCode is 404
+- Embed ErrNotFound in the struct
+- Make APIError a string type
+> errors.Is walks the chain and, at each error, also calls its Is method if
+> it has one. That lets a typed error match a sentinel.
+
+## Which call extracts the details from an error that might be a wrapped *APIError?
+- apiErr := err.(*APIError)
+* var apiErr *APIError; errors.As(err, &apiErr)
+- errors.Is(err, &APIError{})
+- errors.Unwrap(err).(*APIError)
+> errors.As searches the whole chain for an error assignable to the target
+> type and stores it. A type assertion only checks the outermost error.
+
+## Why should New accept an *http.Client instead of always using http.DefaultClient?
+* So callers can set timeouts and transports (retries, proxies) and tests can inject fakes
+- http.DefaultClient can't send PUT requests
+- It's required for HTTPS
+> Injecting the client keeps the SDK flexible and testable. DefaultClient
+> has no timeout and is shared global state.
+
+## url.URL.JoinPath treats its arguments as...
+- Unescaped text that it escapes for you
+* Already-escaped path text (it also cleans "." and ".." segments)
+- Query parameters
+> JoinPath joins onto EscapedPath() and re-parses the result, so escape each
+> segment yourself (url.PathEscape) first.
+
+## A Put gets 204 No Content. Must you still close resp.Body?
+* Yes: always close bodies, even empty ones
+- No, 204 responses have no body object
+- Only if you plan to reuse the client
+> resp.Body is always non-nil for a successful Do. Closing it is cheap and
+> keeps the habit consistent. For a 204 it's http.NoBody.
+
+## Why read error response bodies through io.LimitReader?
+* An error page (from a proxy, say) can be huge; you only need enough for a message
+- It's required to reuse connections
+- Because error bodies are always gzip-compressed
+> Bound what you read from untrusted input. 4 KiB is plenty for an error
+> message.
+
+## Is your kvclient.Client safe to use from many goroutines at once?
+* Yes, if it never mutates its own fields after New; http.Client is safe for concurrent use
+- No, every goroutine needs its own Client
+- Only with a mutex around every call
+> A Client holding an immutable base URL and an *http.Client can be shared
+> freely. Sharing it also shares the connection pool, which you want.

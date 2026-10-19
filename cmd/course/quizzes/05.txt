@@ -1,0 +1,72 @@
+# Stage 5: Building requests
+
+## You build a request without setting User-Agent. What does Go's client send?
+- No User-Agent header
+* User-Agent: Go-http-client/1.1 (or /2.0 over HTTP/2)
+- User-Agent: net/http
+> If req.Header has no User-Agent key, the client sends its default. To send
+> no User-Agent at all, set it to the empty string.
+
+## How do you make Go's client send NO User-Agent header?
+- req.Header.Del("User-Agent")
+* req.Header.Set("User-Agent", "")
+- req.UserAgent = ""
+- It's impossible
+> Deleting the key means "use the default". A present-but-empty value means
+> "send nothing" (documented on Request.Write).
+
+## You set req.Header.Set("Host", "example.test"). What Host does the server see?
+* The host from the URL: Go ignores Header["Host"] when sending; set req.Host instead
+- example.test
+- Both, as two Host headers
+> On the client, the Host comes from req.Host if non-empty, otherwise from
+> req.URL.Host. The Host key in req.Header is ignored.
+
+## You didn't set Accept-Encoding. What happens when the server returns a gzip-compressed body?
+* Go sent "Accept-Encoding: gzip" for you, and transparently decompresses the body (resp.Uncompressed is true)
+- You get compressed bytes and must decompress them
+- Go never asks for compression
+- The request fails
+> The Transport adds Accept-Encoding: gzip and decompresses for you, unless
+> you set Accept-Encoding yourself (or DisableCompression). Then you get the
+> raw bytes.
+
+## Which line sends TWO X-Tag headers, "a" and "b"?
+```go
+req.Header.Set("X-Tag", "a")
+// ???
+```
+- req.Header.Set("X-Tag", "b")
+* req.Header.Add("X-Tag", "b")
+- req.Header["x-tag"] = []string{"b"}
+> Set replaces all values; Add appends. Direct map assignment with a
+> non-canonical key creates a separate entry with a non-canonical name.
+
+## Why sort header names before printing them?
+- HTTP requires headers in alphabetical order
+* Go maps have no defined iteration order, so output would change from run to run
+- http.Header is a slice
+> Map iteration order is deliberately randomised. slices.Sorted(maps.Keys(h))
+> gives stable, testable output.
+
+## What does a HEAD response contain?
+* The status line and headers that GET would return, but no body
+- Only the status line
+- The full body, like GET
+- Only headers the server chooses to send for HEAD
+> HEAD is "GET without the body". Content-Length may describe the body a GET
+> would return. Go's server discards anything a handler writes for HEAD.
+
+## What does a type need to be usable with fs.Var for a repeatable flag?
+- A Parse(string) method
+* String() string and Set(string) error methods (the flag.Value interface)
+- To be a []string
+> flag.Value has String and Set. Each occurrence of the flag calls Set, so
+> appending in Set makes the flag repeatable.
+
+## For `gocurl http://x/ -X PUT`, why doesn't a single fs.Parse(args) see -X?
+- Because -X must be upper-case
+* The flag package stops parsing at the first non-flag argument
+- Because PUT is not a valid method
+> Parsing stops at "http://x/", leaving "-X PUT" in fs.Args(). To accept
+> flags anywhere, take the positional argument and parse the rest again.

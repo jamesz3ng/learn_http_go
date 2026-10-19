@@ -1,0 +1,66 @@
+# Stage 1: HTTP is just text
+
+## A client writes "GET /hello HTTP/1.1\r\n" with a single Write. Is the server guaranteed to receive it in a single conn.Read?
+- Yes, TCP preserves message boundaries
+* No: TCP is a byte stream; reads can split or merge writes arbitrarily
+- Yes, as long as the line is shorter than 1500 bytes
+> TCP has no message boundaries. One write can arrive as several reads, and
+> several writes can arrive as one. That's why you read lines with a
+> buffered reader (bufio.Reader.ReadString('\n')) instead of a single Read.
+
+## Your handler writes "Content-Length: 5" but the body is "hello world". What does a keep-alive HTTP/1.1 client see?
+- The whole body "hello world"
+* The body "hello"; the remaining bytes are misread as the start of the next response
+- An immediate error before reading anything
+> The client trusts Content-Length: it reads 5 bytes and considers the
+> response complete. The leftover " world" stays on the connection and
+> corrupts the next exchange. Framing bugs like this are why net/http
+> computes lengths for you.
+
+## Why does Go's HTTP server (and yours) start a goroutine per connection?
+- Goroutines make each request faster
+* So that a slow or idle client can't block other clients from being served
+- Because net.Conn is not safe to use from the goroutine that accepted it
+- HTTP requires it
+> With a sequential accept loop, one client that connects and sends nothing
+> blocks everyone else. A goroutine per connection isolates clients, and
+> goroutines are cheap enough for this to scale.
+
+## Which function splits "Host: localhost:8080" into the name and the value correctly?
+- strings.Split(line, ":")
+* strings.Cut(line, ":")
+- strings.Fields(line)
+- strings.SplitAfter(line, ":")
+> strings.Cut splits at the FIRST separator only, so the value
+> "localhost:8080" keeps its own colon. strings.Split would give three parts.
+
+## What does `Connection: close` in a response tell the client?
+- That the client must close its socket immediately, before reading the body
+* That the server will close the connection after this response, so no further requests can be sent on it
+- That the body is delimited by a blank line
+- That the response is an error
+> It disables keep-alive for this connection. The client reads this response
+> (by Content-Length, chunking or EOF) and won't send another request on it.
+
+## What does len("héllo") return in Go, and is that the right value for Content-Length?
+- 5, and yes
+- 5, but Content-Length needs the byte count
+* 6, and yes: Content-Length counts bytes and len counts bytes
+- 6, but Content-Length needs the character count
+> Strings in Go are byte sequences; "é" is 2 bytes in UTF-8, so len is 6.
+> Content-Length is a count of bytes on the wire, so len(body) is correct.
+
+## Your accept loop is `for { conn, err := ln.Accept(); if err != nil { continue }; go handle(conn) }`. What goes wrong when the listener is closed?
+- Nothing, the loop exits
+* Accept fails immediately forever, so the loop spins at 100% CPU and Serve never returns
+- The program panics
+> After Close, Accept returns an error (net.ErrClosed) every time. Ignoring
+> it creates a hot loop. Return the error instead, as net/http's Server.Serve
+> does (it only retries errors that are temporary, with a backoff).
+
+## In net/http's source (server.go), which method contains the accept loop that starts `go c.serve(...)`?
+= Server.Serve
+= (*Server).Serve
+= Serve
+> func (srv *Server) Serve(l net.Listener) error loops over l.Accept() and
+> starts a goroutine per connection, just like your rawhttp.Serve.

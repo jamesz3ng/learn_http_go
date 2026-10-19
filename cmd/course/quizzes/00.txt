@@ -1,4 +1,76 @@
-## placeholder
-- a
-* b
-> c
+# Stage 0: Orientation, HTTP on the wire
+
+## In an HTTP/1.1 message, what marks the end of the header section?
+- A line containing only "END"
+* An empty line (CRLF immediately after the previous line's CRLF)
+- The Content-Length header
+- The first byte of the body
+> Headers are followed by an empty line, i.e. the bytes "\r\n\r\n" end the
+> header section. Everything after that is the body (if any).
+
+## A response has no Content-Length and no Transfer-Encoding header. How does an HTTP/1.1 client know where the body ends?
+- It can't; the response is invalid
+- The body is always empty in that case
+* The body ends when the server closes the connection
+- The body ends at the first empty line
+> Without a length or chunking, a response body is "delimited by connection
+> close". This prevents keep-alive, which is why servers prefer
+> Content-Length or chunked encoding.
+
+## Which of these methods are idempotent (sending twice has the same effect as sending once)?
+* GET
+* PUT
+* DELETE
+- POST
+- PATCH
+> GET, HEAD, OPTIONS, PUT and DELETE are idempotent by definition (RFC 9110
+> §9.2.2). POST is not ("place order" twice = two orders), and PATCH isn't in
+> general. Idempotency is what makes a request safe to retry automatically.
+
+## Is the "#reviews" fragment of https://example.com/page#reviews sent to the server?
+- Yes, as part of the request target
+- Yes, in a Fragment header
+* No, it stays in the client
+> The fragment identifies a part of the resource for the client (e.g. a
+> scroll position). It is never part of the request target.
+
+## Are the headers "Content-Type" and "content-type" the same header?
+* Yes, header names are case-insensitive
+- No, header names are case-sensitive
+- Only in HTTP/2
+> Header field names are case-insensitive in every HTTP version. (HTTP/2
+> actually requires lower-case names on the wire.) Go canonicalises them to
+> "Content-Type" form when you use http.Header's methods.
+
+## A client receives status 304. Which class of status is that, and what does it mean?
+- 2xx, success: the body is in the response
+* 3xx: "Not Modified", so use your cached copy
+- 4xx: the client did something wrong
+- 5xx: the server failed
+> 304 Not Modified answers a conditional request (If-None-Match /
+> If-Modified-Since): your cached copy is still good, so no body is sent.
+> You'll implement this in stage 21.
+
+## What does HTTP/2 change compared to HTTP/1.1?
+- The meaning of methods and status codes
+* The wire format: binary frames, multiplexed streams and compressed headers, with the same semantics
+- It replaces TCP with UDP
+- Headers are no longer allowed
+> HTTP/2 keeps HTTP semantics (methods, status codes, headers, bodies) and
+> changes how they're encoded on the connection. HTTP/3 is the version that
+> moves to QUIC over UDP.
+
+## In Go, which interface must a value implement to answer HTTP requests on the server side?
+= http.Handler
+= Handler
+> http.Handler has a single method, ServeHTTP(http.ResponseWriter, *http.Request).
+> Everything that answers requests (routers, middleware, your handlers) is one.
+
+## On the client side, which part of net/http keeps a pool of open connections and handles TLS and HTTP/2?
+- http.Client
+* http.Transport (an http.RoundTripper)
+- http.Request
+- http.DefaultServeMux
+> http.Client applies policy (redirects, cookies, timeout) and delegates the
+> actual exchange to its Transport, a RoundTripper. *http.Transport manages
+> the connection pool, dialing, TLS, proxies and HTTP/2.

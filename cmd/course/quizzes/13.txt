@@ -1,0 +1,67 @@
+# Stage 13: Cookies and authentication
+
+## Which http.Cookie field value deletes the cookie on the client?
+- MaxAge: 0
+* MaxAge: -1 (which writes Max-Age=0)
+- Value: ""
+- Expires: time.Time{}
+> In Go, MaxAge 0 means "not specified" (a session cookie). Any negative
+> MaxAge writes Max-Age=0, which tells the client to delete it. Match Name,
+> Path and Domain.
+
+## A server sets three cookies. How many Set-Cookie headers does the response contain?
+= 3
+> One Set-Cookie per cookie. Unlike most headers, they can't be folded into
+> one comma-separated line. The client sends them back in a single Cookie
+> header.
+
+## What does the HttpOnly cookie attribute do?
+* Stops JavaScript (document.cookie) from reading the cookie
+- Sends the cookie only over HTTP, not HTTPS
+- Sends the cookie only with GET requests
+> HttpOnly limits the damage of XSS. Secure is the one that means "HTTPS only".
+
+## A request arrives with no Authorization header at an endpoint that requires login. Which response is right?
+* 401 Unauthorized with a WWW-Authenticate header
+- 403 Forbidden
+- 404 Not Found
+- 400 Bad Request
+> 401 means "unauthenticated: tell me who you are", and must say how
+> (WWW-Authenticate). 403 is for an authenticated client that isn't allowed.
+
+## Why use subtle.ConstantTimeCompare instead of == for passwords and tokens?
+* == can return as soon as a byte differs, and that timing difference can leak the secret
+- == doesn't work on byte slices
+- ConstantTimeCompare is faster
+> Constant-time comparison takes the same time wherever the first difference
+> is. Compare the username and password before deciding, too.
+
+## What's in a Basic Authorization header?
+- The password hashed with SHA-256
+* "Basic " + base64("user:password"): an encoding, not encryption
+- A signed token
+> Anyone who sees the header can decode it, which is why Basic auth is only
+> acceptable over HTTPS.
+
+## How do you read one cookie named "session" on the server?
+* c, err := r.Cookie("session")
+- r.Header.Get("session")
+- r.FormValue("session")
+- r.Cookies()["session"]
+> r.Cookie returns http.ErrNoCookie if it's absent. r.Cookies() returns a
+> slice of all cookies.
+
+## A client edits its cookie from "role=user" to "role=admin". How do you prevent trusting it?
+* Sign cookie values (e.g. HMAC) and verify the signature, or store state server-side and keep only a random session ID in the cookie
+- Set HttpOnly
+- Set Secure
+- Use SameSite=Strict
+> Cookies are client-controlled storage. HttpOnly, Secure and SameSite
+> limit who can read or send them, not what the owner can write.
+
+## What does SameSite=Lax mainly defend against?
+* Cross-site request forgery (CSRF): the cookie isn't sent on most cross-site sub-requests and POSTs
+- Cross-site scripting (XSS)
+- Eavesdropping on the network
+> With Lax the cookie still goes with top-level GET navigations from other
+> sites, but not with cross-site POSTs, iframes or fetches.

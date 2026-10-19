@@ -1,0 +1,65 @@
+# Stage 7: Sending bodies
+
+## For which body types does http.NewRequest set ContentLength and GetBody automatically?
+* *bytes.Buffer
+* *bytes.Reader
+* *strings.Reader
+- *os.File
+- io.Reader returned by io.MultiReader
+> NewRequestWithContext type-switches on exactly these three. Any other
+> reader has an unknown length (sent chunked) and no GetBody.
+
+## You send an *os.File as the request body without setting ContentLength. How is the body framed on the wire?
+- With Content-Length, from the file's size
+* With Transfer-Encoding: chunked
+- The request fails
+- The file is read into memory first
+> NewRequest doesn't know an *os.File's length, so the body is sent chunked.
+> Set req.ContentLength = info.Size() yourself if the server needs a length.
+
+## What is req.GetBody used for?
+- Reading the response body
+* Getting a fresh copy of the request body so it can be re-sent (307/308 redirects, retries)
+- Validating the body before sending
+> After the first attempt consumes req.Body, the client (or your retry logic)
+> calls GetBody for a new reader with the same content.
+
+## url.QueryEscape("a b") returns?
+= a+b
+> In query strings and form bodies (application/x-www-form-urlencoded), a
+> space is encoded as "+". url.PathEscape("a b") gives "a%20b".
+
+## Which encoding must you use for a value inside a URL path segment, like a key in /kv/{key}?
+- url.QueryEscape, because + means space everywhere
+* url.PathEscape: in a path, "+" is a literal plus and "/" must be escaped as %2F
+- No escaping is needed
+> In paths, "+" has no special meaning and "/" separates segments. PathEscape
+> encodes for a single segment.
+
+## You send a body and never set Content-Type. What does Go send?
+- application/octet-stream
+- text/plain
+* No Content-Type header at all
+- It sniffs the body
+> The client doesn't guess request content types (sniffing only happens on
+> server responses). Set Content-Type yourself.
+
+## What does url.Values{"b": {"2"}, "a": {"1"}}.Encode() return?
+- "b=2&a=1"
+* "a=1&b=2"
+- "a=1;b=2"
+> Encode sorts by key, which makes the output deterministic. If order matters
+> to a server, build the string yourself.
+
+## curl -G -d 'q=go' http://x/search sends...
+- POST /search with body q=go
+* GET /search?q=go with no body
+- GET /search with body q=go
+> -G moves the data into the query string and switches the method to GET.
+
+## Why do the -d, --data-binary and --data-urlencode flags append to ONE shared slice in gocurl?
+* To keep the order the user gave across different flags when joining with &
+- Because the flag package requires it
+- To save memory
+> Separate slices would lose the interleaving: "-d a --data-binary b -d c"
+> must become "a&b&c".

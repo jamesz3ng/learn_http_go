@@ -1,0 +1,71 @@
+# Stage 6: Request bodies on the server
+
+## A handler calls io.ReadAll(r.Body) twice. What does the second call return?
+- The same bytes again
+* An empty slice: the body is a stream that's already been consumed
+- An error: the body was closed
+> r.Body reads from the connection once. If you need the bytes twice, keep
+> the slice from the first read (or replace r.Body with a reader over it).
+
+## Which line protects a handler from a client sending a 5 GB body?
+* r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+- r.ContentLength = 1<<20
+- io.LimitReader(r.Body, 1<<20) with no error check
+- r.ParseForm()
+> MaxBytesReader returns an error after the limit and marks the connection
+> to be closed after the response. ContentLength is client-supplied (and may
+> be -1). A plain LimitReader silently truncates, so you can't tell "exactly at
+> the limit" from "way over it".
+
+## Query string is ?q=1, url-encoded body is q=2. After r.ParseForm(), what is r.PostForm.Get("q")?
+- "1"
+* "2"
+- "1,2"
+- ""
+> r.PostForm holds only body values. r.Form holds both, with body values
+> first, so r.Form.Get("q") is also "2" and r.Form["q"] is ["2", "1"].
+
+## Why use mime.ParseMediaType instead of comparing Content-Type with ==?
+* Content-Type can carry parameters like "; charset=utf-8" or "; boundary=..."
+- Content-Type is case-sensitive
+- r.Header.Get lowercases values
+> "application/json; charset=utf-8" != "application/json". ParseMediaType
+> returns the bare (lower-cased) media type plus the parameters.
+
+## What does the argument to r.ParseMultipartForm(32 << 20) limit?
+- The maximum size of the request body
+* How much of the files is kept in memory; the rest spills into temporary files on disk
+- The maximum number of files
+- The size of each file
+> It's a memory threshold, not a body limit. Use MaxBytesReader to cap the
+> total size.
+
+## Which statements about r.FormValue("x") are true?
+* It parses the form (and multipart form) automatically if needed
+* It silently ignores parse errors, including "request body too large"
+- It returns an error if the field is missing
+- It only looks at the query string
+> FormValue is convenient but swallows errors. Call ParseForm or
+> ParseMultipartForm yourself when you need to report them.
+
+## What status code fits "your request body is bigger than I accept"?
+= 413
+= 413 Request Entity Too Large
+= 413 Content Too Large
+> 413 (renamed "Content Too Large" in RFC 9110; Go calls it
+> StatusRequestEntityTooLarge).
+
+## What does the pattern "/anything/{path...}" match?
+- Only /anything/
+- /anything/ followed by exactly one segment
+* /anything/ followed by any remaining path, including slashes, e.g. /anything/a/b/c
+> A {name...} wildcard must come last and matches the rest of the path.
+> r.PathValue("path") returns it, e.g. "a/b/c".
+
+## Decoding {"n": 12345678901234567890} into an `any` gives n as a float64. What do you lose?
+- Nothing
+* Precision: float64 can't represent every integer above 2^53 exactly
+- The sign
+> JSON numbers decode as float64 by default. Use json.Decoder.UseNumber
+> (json.Number) or a typed struct field (int64, big.Int) to keep large
+> integers exact.

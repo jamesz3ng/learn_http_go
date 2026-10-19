@@ -1,0 +1,66 @@
+# Stage 8: Routing in depth
+
+## "GET /status/{code}" is registered first, "GET /status/teapot" second. Which handles GET /status/teapot?
+- The first, because it was registered first
+* "GET /status/teapot", because a literal segment is more specific than a wildcard
+- It panics at registration: the patterns conflict
+> The most specific matching pattern wins, and registration order never
+> matters. "/status/teapot" matches a strict subset of what "/status/{code}"
+> matches.
+
+## What happens when you register both "GET /" and "/index.html" on one ServeMux?
+- "/index.html" wins for every method
+- "GET /" wins for GET requests
+* The second registration panics: they conflict, neither is more specific
+> Both match GET /index.html. "GET /" matches more paths; "/index.html"
+> matches more methods. Neither is a subset of the other, so they conflict,
+> and ServeMux reports it immediately by panicking.
+
+## Pattern "/kv/{key}", request "/kv/a%2Fb". What is r.PathValue("key")?
+- "a%2Fb"
+* "a/b"
+- No match: 404
+- "a"
+> Matching is done segment by segment on the escaped path; %2F is not a
+> separator. Each segment is then unescaped, so the value is "a/b".
+
+## Which of these are invalid patterns that panic when registered?
+* "/items_{id}"
+* "/files/{path...}/meta"
+- "GET /items/{id}"
+- "/files/{path...}"
+> Wildcards must be whole segments, and a {name...} wildcard must be the last
+> segment.
+
+## With only "GET /docs/" registered, what happens to a request for /docs?
+- 404
+* 301 redirect to /docs/
+- The /docs/ handler runs
+> A subtree pattern makes ServeMux redirect its root without the trailing
+> slash. Register "/docs" too if you don't want that.
+
+## What does ServeMux do with a request for /a/../get?
+- 404
+- Serves /a/../get literally
+* Redirects (301) to the cleaned path /get
+> ServeMux sanitises paths: requests with "." or ".." segments or repeated
+> slashes are redirected to the clean equivalent.
+
+## /status/{code} receives /status/abc. Which status should the handler return?
+= 400
+= 400 Bad Request
+> The route matched, but the input is invalid. That's the client's fault: 400.
+> (404 would claim the resource doesn't exist, which is a different thing.)
+
+## Which base64 encoding uses "-" and "_" and no "=" padding?
+- base64.StdEncoding
+- base64.URLEncoding
+* base64.RawURLEncoding
+- base64.RawStdEncoding
+> URL variants swap + and / for - and _. "Raw" variants omit the padding.
+
+## Does "GET /items/{id}" match a HEAD request for /items/7?
+* Yes, GET patterns also match HEAD
+- No, only GET
+> A GET pattern matches both GET and HEAD. The server discards the body for
+> HEAD responses.
