@@ -1,0 +1,67 @@
+# Stage 17: Server timeouts and cancellation
+
+## What timeouts does a server started with http.ListenAndServe(addr, h) have?
+- Sensible defaults: 30s read, 30s write
+* None: the zero http.Server never times out
+- Only an idle timeout
+> ListenAndServe uses a zero-value http.Server. Build your own *http.Server
+> with timeouts for anything exposed to real clients.
+
+## Which timeout is the main defence against slowloris (clients sending headers very slowly)?
+* ReadHeaderTimeout
+- WriteTimeout
+- IdleTimeout
+- MaxHeaderBytes
+> ReadHeaderTimeout bounds the time to read the request line and headers.
+> It defaults to ReadTimeout if zero.
+
+## WriteTimeout is 5s and a handler takes 8s before writing. What happens?
+* The handler keeps running; its writes fail after the deadline, and the client sees the connection close without a response
+- The server cancels the handler's context at 5s and sends 503
+- The server sends 504 Gateway Timeout at 5s
+> WriteTimeout is a deadline on the connection, not on the handler. Use the
+> request context (or TimeoutHandler) to stop work.
+
+## When is r.Context() cancelled?
+* When the client's connection closes
+* When an HTTP/2 client cancels the request
+* When ServeHTTP returns
+- When WriteTimeout expires
+- Never: it's context.Background()
+> Watching r.Context().Done() and passing r.Context() to downstream calls
+> lets work stop when nobody's waiting.
+
+## Why prefer select on a timer and r.Context().Done() over time.Sleep in a slow handler?
+* Sleep can't be interrupted, so the handler keeps running after the client leaves
+- time.Sleep is less accurate
+- Sleep blocks the whole server
+> Sleep only blocks this goroutine, but it ignores cancellation, wasting the
+> goroutine (and whatever it holds) for the full duration.
+
+## What does http.TimeoutHandler(h, 2*time.Second, "too slow") do when h takes 5 seconds?
+* Responds 503 with "too slow" after 2s, and cancels h's request context
+- Kills h's goroutine after 2s
+- Responds 504 Gateway Timeout
+- Waits for h, then sends "too slow"
+> It runs h with a deadline and buffers its output. Since it buffers, it
+> doesn't support streaming (Flush).
+
+## Which status code is nginx's convention for "the client closed the request before we answered"?
+= 499
+> 499 Client Closed Request isn't an official status code (it's never sent
+> to anyone), but it makes access logs honest about abandoned requests.
+
+## IdleTimeout is zero and ReadTimeout is 30s. How long may a keep-alive connection sit idle?
+* 30 seconds: IdleTimeout falls back to ReadTimeout
+- Forever
+- 2 minutes
+> If IdleTimeout is zero, the value of ReadTimeout is used. If both are zero,
+> there is no idle timeout.
+
+## Since Go 1.20, how can a single handler extend its own write deadline?
+* http.NewResponseController(w).SetWriteDeadline(t)
+- r.Context().SetDeadline(t)
+- w.(http.Flusher).SetDeadline(t)
+- It can't; only the Server can
+> ResponseController exposes per-request read and write deadlines; a zero
+> time.Time removes the deadline entirely.

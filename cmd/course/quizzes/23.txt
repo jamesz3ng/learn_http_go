@@ -1,0 +1,59 @@
+# Stage 23: Graceful shutdown
+
+## When does srv.Serve return after another goroutine calls srv.Shutdown(ctx)?
+* Immediately, with http.ErrServerClosed, while Shutdown is still waiting for requests to finish
+- After all in-flight requests have finished
+- Never
+> If main exits when Serve returns, in-flight requests die anyway. Wait for
+> Shutdown to return.
+
+## What does srv.Shutdown do with requests that are in progress?
+* Waits for them to finish (until its context expires)
+- Cancels their contexts and returns
+- Cuts their connections immediately
+> Shutdown closes listeners and idle connections, then polls until active
+> connections become idle. Close is the one that cuts everything off.
+
+## Does Shutdown cancel the contexts of active requests?
+- Yes
+* No: long-running handlers must be told to stop some other way
+> That's why streams need a signal such as a channel closed from a
+> RegisterOnShutdown hook.
+
+## Which signal do Kubernetes, systemd and Docker send first to stop a process?
+= SIGTERM
+= TERM
+> SIGTERM, then SIGKILL (which can't be caught) after the grace period.
+
+## Shutdown(ctx) returns context.DeadlineExceeded. What should you do?
+* Call srv.Close() to force the remaining connections closed, and report the error
+- Call Shutdown again with a longer timeout
+- Nothing, the server has stopped
+> When the grace period is over, remaining connections must be closed
+> explicitly.
+
+## What does srv.RegisterOnShutdown(f) do?
+* Arranges for f to run (in a new goroutine) when Shutdown begins
+- Runs f after Shutdown completes
+- Runs f for every request during shutdown
+> It's the hook for telling long-lived handlers (streams, hijacked
+> WebSocket connections) to wrap up.
+
+## Why might cancelling Server.BaseContext at shutdown be the wrong tool?
+* It cancels every request's context, aborting the short in-flight requests you wanted to complete gracefully
+- BaseContext can't be cancelled
+- It only applies to new connections
+> BaseContext is the parent of all request contexts. Cancelling it is
+> all-or-nothing.
+
+## Why does Run take a net.Listener instead of an address?
+* Tests can listen on port 0, learn the real address, and pass the listener in; it also allows socket activation
+- net.Listen is deprecated
+- Shutdown requires it
+> Injecting the listener separates "where to listen" from "how to serve".
+
+## Why should Run treat http.ErrServerClosed as success?
+* It's what Serve always returns once Shutdown or Close is called: it means "stopped as requested"
+- Because the error is always nil
+- It indicates a crash that was recovered
+> Report it as nil; only other Serve errors are real failures.

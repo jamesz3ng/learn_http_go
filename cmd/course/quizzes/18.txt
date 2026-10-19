@@ -1,0 +1,57 @@
+# Stage 18: Client timeouts
+
+## Does http.Client.Timeout also limit the time spent reading the response body?
+* Yes: it covers the whole exchange, including redirects and reading the body
+- No, only until the response headers arrive
+- Only for bodies with a Content-Length
+> Reads from resp.Body fail once Client.Timeout passes, even after Do has
+> returned. That's why it's unsuitable for long-lived streams.
+
+## Which transport setting limits waiting for the response headers but NOT reading the body?
+* Transport.ResponseHeaderTimeout
+- Client.Timeout
+- Transport.IdleConnTimeout
+- net.Dialer.Timeout
+> ResponseHeaderTimeout starts after the request is written and stops when
+> headers arrive. The body can take as long as it likes.
+
+## What does http.DefaultTransport's IdleConnTimeout (90s) control?
+- How long a request may take
+* How long an unused keep-alive connection stays in the pool before being closed
+- How long to wait for the server to accept a connection
+> It's about pooled connections, not about requests.
+
+## Which check reliably detects a timeout anywhere in a client error chain?
+* errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
+- err == context.DeadlineExceeded
+- strings.Contains(err.Error(), "timeout")
+- errors.Is(err, http.ErrHandlerTimeout)
+> Different layers produce different error types; net.Error.Timeout() and
+> errors.Is with DeadlineExceeded between them cover all of them.
+
+## A context was cancelled by Ctrl-C (signal.NotifyContext). Which error does a request using it return?
+* One wrapping context.Canceled
+- One wrapping context.DeadlineExceeded
+- No error: the response arrives anyway
+> Cancellation and deadlines are different events: Canceled vs
+> DeadlineExceeded.
+
+## You need a custom TCP connect timeout but want to keep DefaultTransport's other settings. What do you do?
+* tr := http.DefaultTransport.(*http.Transport).Clone(), then set tr.DialContext to a net.Dialer with Timeout
+- Set http.DefaultClient.Timeout
+- Modify http.DefaultTransport directly
+- Create &http.Transport{} with only DialContext set
+> Clone keeps the proxy settings, TLS handshake timeout, HTTP/2 and pool
+> limits. Mutating the shared DefaultTransport affects every other user in
+> the program. A bare &http.Transport{} loses those defaults.
+
+## What exit code does curl use for "Operation timed out"?
+= 28
+> CURLE_OPERATION_TIMEDOUT is 28. gocurl borrows curl's codes.
+
+## Why is Client.Timeout a bad fit for an SSE/watch stream?
+* It would cut the stream off after the timeout even while events are still flowing
+- Streams don't support timeouts
+- It would only apply to the first event
+> Bound streams with a context the caller cancels, and maybe an idle timeout
+> between events, not a total-duration timeout.

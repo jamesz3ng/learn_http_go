@@ -1,0 +1,72 @@
+# Stage 21: Files, ranges and uploads
+
+## A client sends If-None-Match: "abc" and the resource's ETag is still "abc". What's the response?
+* 304 Not Modified, with no body
+- 200 OK with the full body
+- 412 Precondition Failed
+- 204 No Content
+> The client's cached copy is current, so the server says so without
+> resending the content.
+
+## Which status code means "here's the part of the content you asked for with Range"?
+= 206
+= 206 Partial Content
+> 206 Partial Content, with a Content-Range header such as
+> "bytes 0-4/11". 416 means the requested range can't be satisfied.
+
+## What do you need to do so http.ServeContent answers If-None-Match requests?
+* Set the ETag response header before calling ServeContent
+- Pass the ETag as an argument
+- Nothing: it computes ETags automatically
+- Implement If-None-Match yourself
+> ServeContent reads the ETag from w.Header() to evaluate If-Match,
+> If-None-Match and If-Range. It never computes one itself.
+
+## Why does ServeContent take an io.ReadSeeker rather than an io.Reader?
+* To jump to the requested offset for Range requests (and to find the size)
+- To read the content twice
+- Because files are always seekable
+> Seeking lets it serve any byte range without reading from the start, and
+> Seek(0, io.SeekEnd) gives it the length.
+
+## By default, what does http.FileServer do for a directory without index.html?
+* Generates an HTML listing of its contents
+- Returns 404
+- Returns 403
+- Redirects to the parent directory
+> That's convenient for development but often unwanted in production. Wrap
+> the fs.FS to hide directories without an index.
+
+## What does http.StripPrefix("/static", h) do?
+* Removes "/static" from the request path before calling h, and returns 404 if the path doesn't start with it
+- Strips "/static" from response URLs
+- Registers h under /static
+> So the file server sees "/app.js" for a request to "/static/app.js".
+
+## Why use r.MultipartReader() instead of r.ParseMultipartForm() for large uploads?
+* It streams parts as they arrive, so files never need to be held in memory or temp files
+- It's the only way to get file names
+- ParseMultipartForm can't read files
+> ParseMultipartForm buffers the whole form first; MultipartReader lets you
+> process each part as a stream (hashing, writing to storage...).
+
+## A part's Content-Type says image/png. Should a server trust it?
+- Yes, browsers set it correctly
+* No: it's client-supplied; sniff the bytes (http.DetectContentType) if the type matters
+> Clients can claim anything. Sniffing the first 512 bytes gives you the
+> server's own opinion.
+
+## Which status fits "this endpoint only accepts multipart/form-data, and you sent JSON"?
+- 400 Bad Request
+* 415 Unsupported Media Type
+- 406 Not Acceptable
+- 422 Unprocessable Content
+> 415 is about the request's Content-Type. 406 is about the response
+> formats the client will accept.
+
+## What's the difference between a strong ETag "abc" and a weak one W/"abc"?
+* Strong means byte-for-byte identical; weak means semantically equivalent (good enough for caching, not for Range)
+- Weak ETags are shorter
+- Strong ETags must be hashes
+> Range requests (If-Range) and If-Match require strong comparison; weak
+> validators only work for If-None-Match.

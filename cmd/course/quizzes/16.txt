@@ -1,0 +1,72 @@
+# Stage 16: RoundTrippers: client middleware
+
+## Which single method does http.RoundTripper require?
+= RoundTrip
+= RoundTrip(*Request) (*Response, error)
+> RoundTrip(*http.Request) (*http.Response, error): one HTTP exchange.
+
+## A RoundTripper receives a 500 response from the server. What should it return?
+* The response with err == nil
+- nil and an error describing the 500
+- It depends on the method
+> The contract says RoundTrip must not interpret the response: getting a
+> response, whatever its status, is success at this layer.
+
+## Why must a RoundTripper clone the request before setting a header?
+* RoundTrippers must not modify the caller's request; the caller may reuse or inspect it
+- Headers can't be set on an existing request
+- Clone makes the request faster
+> req.Clone(ctx) deep-copies the headers (and more), so changes don't leak
+> back to the caller. The body is still shared.
+
+## Which failures are generally safe and sensible to retry automatically for a GET?
+* A connection reset or refused
+* 503 Service Unavailable
+* 429 Too Many Requests
+- 404 Not Found
+- 400 Bad Request
+- context.Canceled
+> Transient failures may succeed later. 4xx errors mean the request itself is
+> wrong, and a cancelled context means the caller has given up.
+
+## Why shouldn't a generic retry transport retry POST requests?
+* POST isn't idempotent: if the first attempt reached the server, retrying may perform the action twice
+- POST requests can't have bodies replayed
+- Servers reject retried POSTs
+> Only retry non-idempotent requests when the server can deduplicate them,
+> e.g. with an Idempotency-Key header.
+
+## On a retry, where does the request body come from?
+- req.Body again
+* req.GetBody(), which returns a fresh reader with the same content
+- The response body
+- It isn't sent on retries
+> The first attempt consumed (and closed) req.Body. GetBody is set
+> automatically for *bytes.Buffer, *bytes.Reader and *strings.Reader bodies.
+
+## Why add jitter to exponential backoff?
+* So clients that failed together don't all retry at the same instant (thundering herd)
+- To make tests pass
+- Because timers are inaccurate
+> Randomising the delay spreads retries out, giving an overloaded server a
+> chance to recover.
+
+## Why is `time.Sleep(delay)` a poor way to wait between retries?
+* It ignores context cancellation, so a cancelled request keeps sleeping
+- Sleep is inaccurate
+- It blocks other goroutines
+> select on a timer and req.Context().Done() so cancellation takes effect
+> immediately.
+
+## You retry after a 503 without draining and closing its body. What's the cost?
+* The 503's connection can't return to the pool: each retry opens a new connection, and the old one leaks until the body is closed
+- Nothing, the next RoundTrip reuses it
+- The retry gets the old body
+> Always drain and close responses you discard.
+
+## A logging transport is placed INSIDE a retry transport. With 2 retries, how many log lines does one call produce?
+* 3, one per attempt
+- 1
+- 2
+> The retry transport calls the inner transport once per attempt. Placed
+> outside, the logger would see only the final result.

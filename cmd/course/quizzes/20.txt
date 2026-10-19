@@ -1,0 +1,57 @@
+# Stage 20: Consuming streams
+
+## What does io.ReadAll(resp.Body) do on an endless event stream?
+* Blocks forever (or until the connection or a timeout ends), buffering everything in memory
+- Returns the first event
+- Returns an error immediately
+> ReadAll waits for EOF. Process streams incrementally with bufio.Scanner or
+> bufio.Reader instead.
+
+## What is bufio.Scanner's default maximum line length?
+- 4 KiB
+* 64 KiB (bufio.MaxScanTokenSize)
+- 1 MiB
+- Unlimited
+> Longer lines make Scan stop with bufio.ErrTooLong. Call
+> sc.Buffer(buf, max) to raise the limit.
+
+## Two SSE lines "data: a" and "data: b" belong to one event. What is its data?
+- "ab"
+* "a\nb"
+- "b"
+- Two separate events
+> Multiple data fields are joined with newlines.
+
+## The caller cancels ctx while Watch is blocked reading. What should Watch return?
+* ctx.Err() (context.Canceled), not the read error the cancellation caused
+- The underlying network read error
+- nil
+> The read error is a side effect. The caller asked to stop and should get the
+> error that says so.
+
+## How does Watch make the server stop sending when the callback returns an error?
+* By returning, so `defer resp.Body.Close()` closes the connection
+- By sending a STOP event
+- By calling cancel on the server's context
+> Closing a response body before EOF closes the connection; the server's
+> handler sees its context cancelled.
+
+## Why is a callback API (fn func(Event) error) simpler to get right than returning a channel?
+* No extra goroutine to leak or channel to close, and natural back-pressure: the next event isn't read until fn returns
+- Channels can't carry structs
+- Callbacks are faster
+> A channel API needs a goroutine, rules about who closes what, and a way to
+> report errors. It's easy to layer one on top of a callback API.
+
+## How can a JSON decoder tell an absent "value" field from "value": ""?
+* Decode into a *string field: nil means absent
+- Use string and check for ""
+- Use json.RawMessage always
+> Pointer fields stay nil when the key is missing.
+
+## Which bounds a long-lived stream best?
+* A context the caller cancels, possibly plus an idle timeout between events
+- http.Client.Timeout
+- Transport.ResponseHeaderTimeout alone
+> Client.Timeout limits the total time, including the body, so it kills long
+> streams. ResponseHeaderTimeout only covers the wait for headers.

@@ -1,0 +1,63 @@
+# Stage 24: TLS and HTTP/2
+
+## You create &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool}}. Which protocol does it use against an HTTP/2 server?
+* HTTP/1.1: a custom TLS config disables automatic HTTP/2 unless ForceAttemptHTTP2 is true
+- HTTP/2, always
+- It fails to connect
+> Set ForceAttemptHTTP2: true, or clone http.DefaultTransport, which has it.
+
+## How is HTTP/2 negotiated over TLS?
+* ALPN: during the TLS handshake the client offers "h2" and "http/1.1" and the server picks
+- With an Upgrade: h2 header after connecting
+- By the URL scheme h2://
+> Browsers only speak HTTP/2 over TLS, negotiated with ALPN. (Cleartext
+> "h2c" exists but isn't used by browsers.)
+
+## What does InsecureSkipVerify: true do?
+* Skips all certificate verification: the connection is encrypted but the server isn't authenticated, so a man-in-the-middle can impersonate it
+- Allows TLS 1.0
+- Encrypts without a certificate
+> It's for testing only. Trust a specific CA with RootCAs instead.
+
+## A certificate is valid and trusted but lists only "example.com". You connect to https://127.0.0.1. What happens?
+* Verification fails with an x509.HostnameError ("certificate is valid for example.com, not 127.0.0.1")
+- It works because the IP resolves to example.com
+- It works because the certificate is trusted
+> The requested host must match a name or IP in the certificate's Subject
+> Alternative Names.
+
+## Which error type (Go 1.20+) wraps all certificate verification failures?
+- x509.UnknownAuthorityError
+* *tls.CertificateVerificationError
+- *net.OpError
+- tls.AlertError
+> It wraps the specific x509 error, so errors.As can find either level.
+
+## How does a Go server know a request came over TLS?
+* r.TLS is non-nil
+- r.URL.Scheme == "https"
+- r.Proto == "HTTPS/1.1"
+> On the server r.URL.Scheme is usually empty (stage 4); r.TLS holds the
+> connection state for HTTPS requests.
+
+## How do you disable HTTP/2 in a Go client or server?
+* Set TLSNextProto to a non-nil, empty map (or, in Go 1.24+, use the Protocols field)
+- Set ForceAttemptHTTP2: false on the server
+- Use http.ListenAndServe instead of ListenAndServeTLS
+> A nil TLSNextProto means "configure HTTP/2 automatically"; an empty map
+> means "no extra protocols".
+
+## A plain HTTP request arrives at a Go HTTPS server's port. What does the client get?
+* 400 Bad Request: "Client sent an HTTP request to an HTTPS server."
+- A redirect to https://
+- A TLS alert
+- The connection hangs
+> The server spots the plain-text request where it expected a TLS handshake
+> and answers in plain HTTP.
+
+## In tests, which helper gives you an HTTPS server and a client that trusts it?
+* httptest.NewTLSServer(h), then srv.Client()
+- httptest.NewServer(h) with srv.TLS = true
+- http.ListenAndServeTLS with a test cert
+> NewTLSServer uses a built-in certificate; srv.Client() is preconfigured to
+> trust it, and srv.Certificate() returns it.

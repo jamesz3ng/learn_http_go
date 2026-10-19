@@ -20,6 +20,7 @@ belongs.
 | [kvclient](kvclient/) | 10, 16, 20 |
 | [loadgen](loadgen/) | 25 |
 | [proxy](proxy/) | 26 |
+| [cmd/gobin](cmd/gobin/main.go) | the final `cmd/gobin/main.go` (stages 15, 17, 21, 23, 24) |
 
 There's rarely one right answer. If your code passes the tests and you can
 explain why it's correct, it's a good solution.

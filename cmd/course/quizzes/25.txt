@@ -1,0 +1,61 @@
+# Stage 25: Connection pooling and httptrace
+
+## What is the effective default of Transport.MaxIdleConnsPerHost?
+= 2
+> Zero means DefaultMaxIdleConnsPerHost, which is 2: too few for concurrent
+> clients that talk to one host.
+
+## 50 workers share a transport with the default MaxIdleConnsPerHost and hit one host. What happens as responses finish?
+* Only 2 connections are kept idle; the rest are closed, so later requests keep dialling new connections
+- All 50 connections are kept for reuse
+- Requests wait for one of 2 connections
+> Excess idle connections are closed. MaxConnsPerHost (unlimited by default)
+> is the setting that would make requests wait instead.
+
+## Which conditions must hold for an HTTP/1.1 connection to go back into the pool?
+* The response body was read to EOF
+* The body was closed
+* Neither side asked to close the connection (keep-alive)
+- The request used GET
+> Partially read bodies and Connection: close responses lose the connection.
+
+## How do you find out whether one specific request reused a pooled connection?
+* An httptrace.ClientTrace with a GotConn hook, attached via httptrace.WithClientTrace(ctx, trace); check GotConnInfo.Reused
+- resp.Header.Get("Connection")
+- http.Transport.Stats()
+> httptrace exposes per-request hooks for DNS, connect, TLS, getting a
+> connection, writing the request, the first response byte, and more.
+
+## Over HTTP/2, roughly how many connections does a Go client keep to one host under concurrency?
+* Usually one, because requests are multiplexed as streams on it
+- One per concurrent request
+- Two
+> HTTP/2 multiplexing makes most of the HTTP/1.1 pooling problem disappear.
+
+## What does MaxConnsPerHost limit?
+* The total number of connections (dialling, active and idle) to a host; extra requests wait
+- Only idle connections
+- Requests per second
+> It's a hard cap on connections; when reached, new requests queue until a
+> connection is free.
+
+## Why report p99 latency rather than only the average?
+* Averages hide the slow tail that real users hit; percentiles show it
+- p99 is easier to compute
+- Averages are always wrong
+> If 1% of requests take 2 seconds, many users see it, especially on pages
+> making many requests.
+
+## In a worker-pool load generator, what bounds the number of requests in flight?
+* The number of worker goroutines
+- The size of the jobs channel
+- GOMAXPROCS
+> Each worker sends one request at a time, so in-flight requests never
+> exceed the worker count.
+
+## What is "coordinated omission" in load testing?
+* A closed-loop tester sends fewer requests while the server stalls, so measured latency underestimates what users would see
+- Forgetting to close response bodies
+- Workers that share a connection
+> Open-loop testing (sending on a schedule and measuring from the scheduled
+> time) avoids it.

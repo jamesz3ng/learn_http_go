@@ -187,9 +187,14 @@ func (a *asker) ask(q question, index, total int) outcome {
 			return outQuit
 		}
 		reply = strings.TrimSpace(a.in.Text())
-		if reply != "" {
-			break
+		if reply == "" {
+			continue
 		}
+		if len(shown) > 0 && !validChoice(reply, len(shown)) {
+			fmt.Fprintf(a.out, "%s\n", a.c.dim(fmt.Sprintf("Answer with letters a-%c (e.g. \"b\" or \"a,c\"), s to see the answer, or q to quit.", letters[len(shown)-1])))
+			continue
+		}
+		break
 	}
 	switch strings.ToLower(reply) {
 	case "q", "quit", "exit":
@@ -232,6 +237,27 @@ func (a *asker) ask(q question, index, total int) outcome {
 	fmt.Fprint(a.out, a.c.red("✗ Not quite. "))
 	a.reveal(q, shown, letters)
 	return outWrong
+}
+
+// validChoice reports whether reply is a command (s, q, ...) or made only of
+// option letters, commas and spaces.
+func validChoice(reply string, n int) bool {
+	switch strings.ToLower(reply) {
+	case "q", "quit", "exit", "s", "skip", "?":
+		return true
+	}
+	letters := "abcdefghij"[:n]
+	seen := false
+	for _, r := range strings.ToLower(reply) {
+		switch {
+		case strings.ContainsRune(letters, r):
+			seen = true
+		case r == ',' || r == ' ':
+		default:
+			return false
+		}
+	}
+	return seen
 }
 
 func (a *asker) reveal(q question, shown []option, letters string) {

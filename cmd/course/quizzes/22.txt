@@ -1,0 +1,62 @@
+# Stage 22: Downloads, uploads and resuming
+
+## You resume with Range: bytes=40- and the server answers 200 OK with the full file. What must you do?
+* Truncate the file and write the whole body: the server ignored the Range
+- Append the body to the partial file
+- Report an error
+> Appending would duplicate the first 40 bytes. Only a 206 response means
+> "here's the part from byte 40".
+
+## A resume request gets 416 Range Not Satisfiable. What does that usually mean for -C -?
+* The local file is already complete (the range starts at or past the end)
+- The server doesn't support ranges
+- The file was deleted on the server
+> The requested start offset equals (or exceeds) the remote size. Leave the
+> file alone.
+
+## What Content-Type does multipart.Writer.CreateFormFile give the part?
+* application/octet-stream, always
+- The type guessed from the file name
+- text/plain
+> Use CreatePart with your own textproto.MIMEHeader to set a better type.
+
+## What happens if you forget mw.Close() on a multipart.Writer?
+* The final boundary is never written, so the body is malformed and the server's parser fails
+- Nothing; Close is only for files
+- The boundary is regenerated
+> Close writes the closing "--boundary--" line.
+
+## Streaming a multipart upload through io.Pipe instead of a bytes.Buffer means...
+* Constant memory use, but no Content-Length (chunked) and no GetBody (no automatic replay on 307 or retry)
+- The same as a bytes.Buffer
+- The upload can't be cancelled
+> A pipe is a stream of unknown length that can only be read once. That's the
+> price of not buffering.
+
+## How does pw.CloseWithError(err) affect the HTTP client reading the pipe?
+* Its next Read returns err, so the request fails instead of sending a truncated body
+- The client retries
+- The error is ignored and EOF is returned
+> CloseWithError(nil) is a normal EOF; a non-nil error propagates to the
+> reader.
+
+## Which flags open a file for appending, creating it if needed?
+* os.O_CREATE|os.O_WRONLY|os.O_APPEND
+- os.O_CREATE|os.O_WRONLY|os.O_TRUNC
+- os.O_RDWR
+> O_TRUNC empties the file (that's what os.Create does); O_APPEND makes every
+> write go to the end.
+
+## What does mime.TypeByExtension(".xyz123") return?
+* "" (an unknown extension)
+- "application/octet-stream"
+- An error
+> It returns the empty string when it doesn't know the extension. Fall back
+> to application/octet-stream yourself.
+
+## Why check that -F files exist before starting the request?
+* So the failure is clean (exit 26) instead of an aborted, half-sent upload
+- Because the pipe can't read files
+- Because os.Open is slow
+> Validating inputs up front gives better errors and avoids sending garbage
+> to the server.

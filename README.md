@@ -126,10 +126,18 @@ Also see: [how this course is designed to help you learn](docs/LEARNING.md) ·
 stages/NN-*/README.md   the course: one directory per stage
 rawhttp/ gobin/ gocurl/ kvclient/ loadgen/ proxy/
                         YOUR code. Starter stubs with TODOs; grow them stage by stage
-cmd/                    small mains for each tool (+ cmd/course, the runner)
+cmd/                    a small main for each tool, to try your code for real:
+                          go run ./cmd/gobin        your server (you'll rewrite this main in stage 23)
+                          go run ./cmd/gocurl URL   your curl
+                          go run ./cmd/kv list      your SDK from the command line
+                          go run ./cmd/rawhttp      stage 1's server
+                          go run ./cmd/loadgen URL  your load generator
+                          go run ./cmd/proxy ...    your proxy
+                        plus cmd/course, the runner (quizzes live in cmd/course/quizzes)
 tests/                  the stage tests (the spec). Read them, don't edit them
 solutions/              reference solutions. Spoilers! See solutions/README.md
 docs/                   learning guide, cheat sheet, next steps
+scripts/selfcheck.sh    maintainer check: solutions pass, starter fails
 ```
 
 ## FAQ
